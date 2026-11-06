@@ -58,6 +58,8 @@ let progress = { done: 0, total: 0 };
 let quitting = false;
 let pendingEmpty = EMPTY_ON_START;
 let recent = []; // responses from the last hour, for the flow rate
+let vessel = 'cylinder'; // what the widget currently shows (reported by the page)
+const EMPTY_LABELS = { tube: 'Empty test tube', cylinder: 'Empty cylinder', tub: 'Drain bathtub', pool: 'Drain pool' };
 
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 const stateFile = () => path.join(app.getPath('userData'), 'state.json');
@@ -376,8 +378,8 @@ function buildMenu() {
           },
         ];
   return Menu.buildFromTemplate([
-    { label: 'Show cylinder', type: 'checkbox', checked: win.isVisible(), click: toggleVisible },
-    { label: 'Empty cylinder', enabled: !scanning, click: empty },
+    { label: 'Show widget', type: 'checkbox', checked: win.isVisible(), click: toggleVisible },
+    { label: EMPTY_LABELS[vessel] || 'Empty', enabled: !scanning, click: empty },
     { type: 'separator' },
     {
       label: 'Period',
@@ -506,7 +508,14 @@ async function snapshot() {
   const img = await win.webContents.capturePage();
   fs.writeFileSync(SNAPSHOT, img.toPNG());
   const all = view('all');
-  const summary = { allTime: { liters: all.est.l, kwh: all.est.wh.mid / 1000, tokens: all.est.tokens }, layers: all.layers, rate: all.rate, days: Object.keys(days).length };
+  const summary = {
+    allTime: { liters: all.est.l, kwh: all.est.wh.mid / 1000, tokens: all.est.tokens },
+    layers: all.layers,
+    rate: all.rate,
+    days: Object.keys(days).length,
+    vessel,
+    menu: buildMenu().items.map((i) => i.label).filter(Boolean),
+  };
   fs.writeFileSync(SNAPSHOT.replace(/\.png$/i, '') + '.json', JSON.stringify(summary, null, 2));
   quit();
 }
@@ -545,6 +554,9 @@ if (!SNAPSHOT && !DEMO && !app.requestSingleInstanceLock()) {
       tray.on('right-click', () => tray.popUpContextMenu(buildMenu()));
     }
     ipcMain.on('menu', () => buildMenu().popup({ window: win }));
+    ipcMain.on('vessel', (_e, name) => {
+      if (EMPTY_LABELS[name]) vessel = name;
+    });
     if (DEMO) startDemo();
     else startWorker();
     setInterval(() => push(), 20000); // keeps the flow rate and "Today" current

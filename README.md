@@ -61,7 +61,7 @@ widget. Drag the widget anywhere; it remembers its position.
 
 | Option | What it does |
 |---|---|
-| Empty cylinder | Pours the water out, so you can measure one task ("since 3:42 PM"). Your real totals keep counting. `thirstyclaude --empty` does the same from a terminal. |
+| Empty / Drain | Named for what's showing: "Empty test tube", "Empty cylinder", "Drain bathtub" or "Drain pool". Pours the water out, so you can measure one task ("since 3:42 PM"). Your real totals keep counting. `thirstyclaude --empty` does the same from a terminal. |
 | Period | Today, last 7 days, last 30 days, all time, or since emptied. |
 | Estimate | ThirstyClaude or EcoLogits (see below). |
 | Water counted | Including power plants, or data-center cooling only. |
@@ -152,7 +152,7 @@ Background reading:
 
 | Option | What it does |
 |---|---|
-| `--empty` | Empties the cylinder, even while the widget is already running. |
+| `--empty` | Empties the vessel, even while the widget is already running. |
 | `--demo` | Shows made-up data, for trying it out or taking screenshots. |
 | `--period=today` | Starts on a period: `today`, `week`, `month` or `all`. |
 

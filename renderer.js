@@ -97,6 +97,7 @@ function setVessel(name) {
   const v = VESSELS[name];
   cur.vessel = name;
   cur.cap = null;
+  window.thirsty.vessel(name); // so the menu can say "Drain bathtub" etc.
   $('behind').innerHTML = v.behind;
   $('front').innerHTML = v.front;
   $('vclipPath').setAttribute('d', v.clip);
