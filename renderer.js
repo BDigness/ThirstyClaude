@@ -19,10 +19,9 @@ const mixHex = (a, b, t) =>
 // CO₂ mode: a light grey haze over the project colours. More than ~15% makes
 // neighbouring layers hard to tell apart (checked with a palette validator).
 const smoke = (hex) => mixHex(hex, '#9aa1ab', 0.15);
-// In CO₂ mode the vessel holds the gas itself: 1 kg of CO₂ is about 547 L at 20 °C.
+// In CO₂ mode, which vessel to draw follows the gas volume (about 547 L per kg
+// at 20 °C), but everything shown is in kilograms and everyday comparisons.
 const CO2_L_PER_KG = 547;
-const KM_PER_KG = 1 / 0.244; // average gasoline car (EPA)
-const TREE_KG_YEAR = 60; // one urban tree, one year (EPA)
 const LADDER = ['tube', 'glass', 'cylinder', 'bucket', 'barrel', 'tub', 'hottub', 'pool'];
 const VESSEL_NAMES = { tube: 'Test tube', glass: 'Glass', cylinder: 'Cylinder', bucket: 'Bucket', barrel: 'Rain barrel', tub: 'Bathtub', hottub: 'Hot tub', pool: 'Swimming pool' };
 
@@ -31,17 +30,22 @@ const VESSEL_NAMES = { tube: 'Test tube', glass: 'Glass', cylinder: 'Cylinder', 
 // drip: where drops start; tilt: tips over when emptied.
 const VESSELS = {
   tube: {
-    clip: 'M66 16 L66 196 A13 13 0 0 0 92 196 L92 16 Z',
+    clip: 'M66 50 L66 196 A13 13 0 0 0 92 196 L92 50 Z',
     bottom: 208,
-    top: 34,
+    top: 68,
     ticks: { x: 66, label: 60 },
-    drip: [79, 2],
+    drip: [79, 39],
     hit: [66, 92],
     tilt: true,
-    behind: '<path d="M66 16 L66 196 A13 13 0 0 0 92 196 L92 16 Z" fill="url(#glassGrad)"/>',
-    front: `<path class="glass" d="M61 11 Q64 12 65 16 L65 196 A14 14 0 0 0 93 196 L93 16 Q94 12 97 11"/>
-      <ellipse class="glass" cx="79" cy="11.5" rx="18" ry="1.8" stroke-width="1.1"/>
-      <rect x="87.5" y="24" width="1.8" height="160" rx="0.9" fill="#fff" opacity="0.13"/>
+    // A dropper.
+    source: `<rect class="solid" x="73" y="2" width="12" height="14" rx="5.5"/>
+      <rect class="solid" x="74.5" y="15" width="9" height="3.5" rx="1"/>
+      <path d="M76.5 18.5 V30 L78.6 37 H79.4 L81.5 30 V18.5 Z" fill="#7cc4ff" fill-opacity="0.18"/>
+      <path class="glass" d="M76.5 18.5 V30 L78.6 37 H79.4 L81.5 30 V18.5" stroke-width="1.1"/>`,
+    behind: '<path d="M66 50 L66 196 A13 13 0 0 0 92 196 L92 50 Z" fill="url(#glassGrad)"/>',
+    front: `<path class="glass" d="M61 45 Q64 46 65 50 L65 196 A14 14 0 0 0 93 196 L93 50 Q94 46 97 45"/>
+      <ellipse class="glass" cx="79" cy="45.5" rx="18" ry="1.8" stroke-width="1.1"/>
+      <rect x="87.5" y="58" width="1.8" height="126" rx="0.9" fill="#fff" opacity="0.13"/>
       <rect class="solid" x="58" y="213" width="42" height="12" rx="3"/>
       <path class="solid" d="M44 225 H114 L119 231 H39 Z" stroke-width="1.1"/>`,
   },
@@ -49,9 +53,14 @@ const VESSELS = {
     clip: 'M57 62 L65 198 Q65 201 68 201 L90 201 Q93 201 93 198 L101 62 Z',
     bottom: 200,
     top: 72,
-    drip: [79, 22],
+    drip: [79, 34],
     hit: [60, 98],
     tilt: true,
+    // A tap.
+    source: `<path class="glass" d="M0 14 H67 Q79 14 79 26 V29" stroke-width="3.4"/>
+      <rect class="solid" x="74.5" y="28.5" width="9" height="3" rx="1"/>
+      <path class="glass" d="M44 14 V7" stroke-width="2"/>
+      <rect class="solid" x="37" y="3.5" width="14" height="3.6" rx="1.8"/>`,
     behind: '<path d="M57 62 L65 198 Q65 201 68 201 L90 201 Q93 201 93 198 L101 62 Z" fill="url(#glassGrad)"/>',
     front: `<path class="glass" d="M54 57 L63 204 Q63.5 210 69 210 L89 210 Q94.5 210 95 204 L104 57"/>
       <ellipse class="glass" cx="79" cy="57.5" rx="25" ry="2.2" stroke-width="1.1"/>
@@ -60,17 +69,24 @@ const VESSELS = {
       <ellipse class="solid" cx="79" cy="214" rx="30" ry="3"/>`,
   },
   cylinder: {
-    clip: 'M58.5 12 H99.5 V206 Q99.5 208 97.5 208 H60.5 Q58.5 208 58.5 206 Z',
+    clip: 'M58.5 46 H99.5 V206 Q99.5 208 97.5 208 H60.5 Q58.5 208 58.5 206 Z',
     bottom: 206,
-    top: 30,
+    top: 64,
     ticks: { x: 58, label: 52 },
-    drip: [79, 2],
+    drip: [79, 40],
     hit: [58.5, 99.5],
     tilt: true,
-    behind: '<rect x="58" y="12" width="42" height="197" fill="url(#glassGrad)"/>',
-    front: `<path class="glass" d="M51 9 Q56 10 57 15 L57 206 Q57 209 60 209 L98 209 Q101 209 101 206 L101 15 Q101 11 105 9"/>
-      <ellipse class="glass" cx="78" cy="9.5" rx="27" ry="2.4" stroke-width="1.1"/>
-      <rect x="94" y="22" width="2.2" height="170" rx="1.1" fill="#fff" opacity="0.13"/>
+    // A burette with its stopcock.
+    source: `<rect x="76.5" y="3" width="5" height="23" fill="#7cc4ff" fill-opacity="0.22"/>
+      <path class="glass" d="M76 0 V26 M82 0 V26" stroke-width="1.1"/>
+      <path class="glass" d="M76 6 H78.5 M76 11 H78.5 M76 16 H78.5 M76 21 H78.5" stroke-width="0.7" opacity="0.6"/>
+      <rect class="solid" x="71" y="26" width="16" height="3.4" rx="1.7"/>
+      <circle class="solid" cx="79" cy="27.7" r="2.8"/>
+      <path class="glass" d="M77 30.5 L78.6 38 H79.4 L81 30.5" stroke-width="1.1"/>`,
+    behind: '<rect x="58" y="46" width="42" height="163" fill="url(#glassGrad)"/>',
+    front: `<path class="glass" d="M51 43 Q56 44 57 49 L57 206 Q57 209 60 209 L98 209 Q101 209 101 206 L101 49 Q101 45 105 43"/>
+      <ellipse class="glass" cx="78" cy="43.5" rx="27" ry="2.4" stroke-width="1.1"/>
+      <rect x="94" y="56" width="2.2" height="136" rx="1.1" fill="#fff" opacity="0.13"/>
       <rect class="solid" x="60" y="209" width="38" height="9"/>
       <path class="solid" d="M40 218 H118 L127 231 H31 Z" stroke-width="1.1"/>`,
   },
@@ -78,12 +94,18 @@ const VESSELS = {
     clip: 'M37 112 L48 202 Q48 205 51 205 L107 205 Q110 205 110 202 L121 112 Z',
     bottom: 204,
     top: 118,
-    drip: [79, 72],
+    drip: [79, 57],
     hit: [40, 118],
     tilt: false,
+    // A garden spigot.
+    source: `<path class="glass" d="M48 0 V36 Q48 44 56 44 H72 Q79 44 79 50 V52" stroke-width="3.4"/>
+      <rect class="solid" x="74.5" y="51.5" width="9" height="3" rx="1"/>
+      <path class="glass" d="M66 44 V37.5" stroke-width="2"/>
+      <circle class="glass" cx="66" cy="33.5" r="4" stroke-width="1.6"/>
+      <path class="glass" d="M62 33.5 H70 M66 29.5 V37.5" stroke-width="1"/>`,
     behind: '<path d="M37 112 L48 202 Q48 205 51 205 L107 205 Q110 205 110 202 L121 112 Z" fill="#fff" fill-opacity="0.05"/>',
-    front: `<path class="glass" d="M34 108 Q79 22 124 108" stroke-width="1.4"/>
-      <rect class="solid" x="72" y="62" width="14" height="5" rx="2.5"/>
+    front: `<path class="glass" d="M34 108 Q79 166 124 108" stroke-width="1.4"/>
+      <rect class="solid" x="72" y="134.5" width="14" height="5" rx="2.5"/>
       <path class="glass" d="M34 108 L45.5 205 Q46 209 50 209 L108 209 Q112 209 112.5 205 L124 108" stroke-width="1.6"/>
       <rect class="solid" x="30" y="104" width="98" height="6" rx="3"/>
       <path class="glass" d="M39 144 H119 M43 178 H115" stroke-width="1" opacity="0.45"/>
@@ -98,8 +120,9 @@ const VESSELS = {
     hit: [38, 120],
     tilt: false,
     behind: '<path d="M39 100 Q34 155 39 208 L119 208 Q124 155 119 100 Z" fill="#fff" fill-opacity="0.05"/>',
-    front: `<path class="glass" d="M40 0 V64 Q40 76 52 76 H64" stroke-width="4"/>
-      <path class="glass" d="M36 97 Q30 155 36 212 L122 212 Q128 155 122 97" stroke-width="1.6"/>
+    // A downspout.
+    source: '<path class="glass" d="M40 0 V64 Q40 76 52 76 H64" stroke-width="4"/>',
+    front: `<path class="glass" d="M36 97 Q30 155 36 212 L122 212 Q128 155 122 97" stroke-width="1.6"/>
       <ellipse class="glass" cx="79" cy="97.5" rx="43" ry="3" stroke-width="1.2"/>
       <path class="glass" d="M33 124 Q79 128 125 124 M32 184 Q79 188 126 184" stroke-width="2.2" opacity="0.55"/>
       <path class="glass" d="M35 198 H26 V203" stroke-width="2.4"/>
@@ -116,8 +139,9 @@ const VESSELS = {
     front: `<path class="glass" d="M12 122 C12 170 25 197 50 199 L88 199 C113 197 126 170 126 122" stroke-width="1.6"/>
       <rect class="solid" x="7" y="117" width="124" height="7" rx="3.5"/>
       <path class="solid" d="M33 197 Q31 206 26 210 Q32 213 39 209 Q38 202 41 198 Z"/>
-      <path class="solid" d="M105 197 Q107 206 112 210 Q106 213 99 209 Q100 202 97 198 Z"/>
-      <path class="glass" d="M4 56 H23 Q30 56 30 63 V79" stroke-width="3.2"/>
+      <path class="solid" d="M105 197 Q107 206 112 210 Q106 213 99 209 Q100 202 97 198 Z"/>`,
+    // A tap.
+    source: `<path class="glass" d="M4 56 H23 Q30 56 30 63 V79" stroke-width="3.2"/>
       <path class="glass" d="M10 52 V56" stroke-width="2"/>
       <rect class="solid" x="5" y="47" width="10" height="5" rx="2.5"/>`,
   },
@@ -125,9 +149,12 @@ const VESSELS = {
     clip: 'M14 126 V166 H27 V204 H111 V166 H124 V126 Z',
     bottom: 203,
     top: 132,
-    drip: [69, 46],
+    drip: [69, 45],
     hit: [14, 124],
     tilt: false,
+    // A garden hose.
+    source: `<path class="glass" d="M140 26 C120 18 98 10 84 18 Q71 25 69 34" stroke-width="3.2"/>
+      <path class="solid" d="M66.2 33.5 L71.8 33.5 L71 42 H67 Z"/>`,
     behind: `<rect x="6" y="120" width="126" height="94" rx="5" fill="#fff" fill-opacity="0.04"/>
       <path d="M14 126 V166 H27 V204 H111 V166 H124 V126 Z" fill="#7cc4ff" fill-opacity="0.07"/>`,
     front: `<path class="glass" d="M14 124 V166 H27 V204 H111 V166 H124 V124" stroke-width="1.4"/>
@@ -150,13 +177,14 @@ const VESSELS = {
       <rect class="solid" x="2" y="97" width="32" height="3" rx="1.5"/>
       <rect class="solid" x="4" y="100" width="5" height="4"/>
       <path class="glass" d="M117 150 V94 Q117 89 121 89 M124 150 V94 Q124 89 128 89" stroke-width="1.4"/>
-      <path class="glass" d="M117 108 H124 M117 120 H124 M117 132 H124 M117 144 H124" stroke-width="1"/>
-      <path d="M58 30 Q52 30 52 24 Q52 18 59 18 Q61 10 70 10 Q78 10 80 17 Q88 16 88 23 Q88 30 81 30 Z" fill="rgba(214,230,255,0.28)"/>`,
+      <path class="glass" d="M117 108 H124 M117 120 H124 M117 132 H124 M117 144 H124" stroke-width="1"/>`,
+    // A rain cloud.
+    source: '<path d="M58 30 Q52 30 52 24 Q52 18 59 18 Q61 10 70 10 Q78 10 80 17 Q88 16 88 23 Q88 30 81 30 Z" fill="rgba(214,230,255,0.28)"/>',
   },
 };
 
 // Top of each vessel's inside (spilled drops must clear it), and where the duck floats.
-const RIM = { tube: 16, glass: 62, cylinder: 12, bucket: 112, barrel: 100, tub: 124, hottub: 126, pool: 104 };
+const RIM = { tube: 50, glass: 62, cylinder: 46, bucket: 112, barrel: 100, tub: 124, hottub: 126, pool: 104 };
 const DUCK_X = { tub: 62, hottub: 52, pool: 104 };
 
 // Automatic: each vessel covers roughly its real-world capacity.
@@ -194,6 +222,7 @@ function setVessel(name) {
   $('front').innerHTML = v.front;
   $('vclipPath').setAttribute('d', v.clip);
   $('ticks').textContent = '';
+  drawSource();
   card.classList.toggle('ducky', name in DUCK_X);
   if (DUCK_X[name]) $('duck').setAttribute('transform', `translate(${DUCK_X[name]} 0)`);
   instant([waterEl, $('bands'), $('range')]);
@@ -220,6 +249,21 @@ function setLook(co2) {
   $('waveFront').setAttribute('d', co2 ? billowPath(6, 1.6) : wavePath(1.4, 24));
   $('waveBack').setAttribute('d', co2 ? billowPath(6, -0.8, 6) : wavePath(1.8, 24, Math.PI, -0.6));
   card.classList.toggle('co2', co2);
+  if (cur.vessel) drawSource();
+}
+
+// Every vessel has something filling it. In CO₂ mode it's an exhaust pipe.
+function exhaust([x, y]) {
+  return `<rect class="solid" x="${x - 3.5}" y="-4" width="7" height="${y - 5}"/>
+    <rect class="solid" x="${x - 4.5}" y="${y - 30}" width="9" height="3" rx="1"/>
+    <rect class="solid" x="${x - 4.5}" y="${y - 18}" width="9" height="3" rx="1"/>
+    <path class="solid" d="M${x - 4.5} ${y - 9} L${x - 6} ${y - 3} H${x + 6} L${x + 4.5} ${y - 9} Z"/>
+    <ellipse cx="${x}" cy="${y - 3}" rx="6" ry="1.3" fill="#1b1f27" fill-opacity="0.65"/>`;
+}
+
+function drawSource() {
+  const v = VESSELS[cur.vessel];
+  $('source').innerHTML = look ? exhaust(v.drip) : v.source || '';
 }
 
 // Soft puffs drifting through the smoke (shown only in CO₂ mode).
@@ -294,9 +338,55 @@ function fmtRange(parts, lo, hi) {
   const [b, ub] = parts(hi);
   return ua === ub ? `${a}–${b} ${ub}` : `${a} ${ua} – ${b} ${ub}`;
 }
-const PHONE_KWH = 0.019; // one smartphone charge (EPA)
+// Counting CO₂ in things people can picture. Factors (kg CO₂ each) come from
+// model.js with each update; sources are in the README.
+const fmtCount = (x) =>
+  x < 0.01 ? x.toFixed(3) : x < 1 ? x.toFixed(2) : x < 10 ? x.toFixed(1).replace(/\.0$/, '') : Math.round(x).toLocaleString('en-US');
+
+function co2Units(q) {
+  return {
+    phone: [q.phoneKg, 'phone charge', 'phone charges'],
+    cigarette: [q.cigaretteKg, 'cigarette', 'cigarettes'],
+    idle: [q.idleKgPerHour],
+    km: [q.carKgPerKm, 'km driven', 'km driven'],
+    tire: [q.tireKg, 'tire burned', 'tires burned'],
+    tree: [q.treeKgPerYear, 'tree for a year', 'trees for a year'],
+  };
+}
+
+// Automatic: the comparison that gives a readable number for the amount.
+function co2UnitFor(kg) {
+  if (kg < 0.05) return 'phone';
+  if (kg < 1) return 'cigarette';
+  if (kg < 30) return 'idle';
+  if (kg < 600) return 'tire';
+  return 'tree';
+}
+
+function co2Say(kg, unit, q) {
+  const [each, one, many] = co2Units(q)[unit];
+  if (unit === 'idle') {
+    const min = (kg / each) * 60;
+    if (min < 90) return `${fmtCount(min)} min of car idling`;
+    if (min < 2880) return `${fmtCount(min / 60)} h of car idling`;
+    return `${fmtCount(min / 1440)} days of car idling`;
+  }
+  const x = kg / each;
+  if (x < 0.001) return `< 0.001 ${many}`;
+  const n = fmtCount(x);
+  return `${n} ${n === '1' ? one : many}`;
+}
+
+function co2Unit(kg, pick, q) {
+  return pick in co2Units(q) ? pick : co2UnitFor(kg);
+}
+
+// Units for the scale: water in mL or L, CO₂ in g, kg or t.
+function scaleFor(x, co2) {
+  if (co2) return x < 1 ? ['g', 1000] : x < 1000 ? ['kg', 1] : ['t', 0.001];
+  return x < 1 ? ['mL', 1000] : ['L', 1];
+}
 const fmtRateKg = (kgph) => (kgph < 1 ? `${Math.round(kgph * 1000)} g/h` : `${kgph.toFixed(1)} kg/h`);
-const fmtNum = (x) => (x < 10 ? x.toFixed(1) : Math.round(x).toLocaleString('en-US'));
 
 // The caption counts in whichever vessel is showing: [litres each, singular, plural].
 const VESSEL_UNITS = {
@@ -315,8 +405,7 @@ function caption(l, vessel) {
   if (l <= 0) return 'empty';
   const x = l / size;
   if (x < 0.001) return `< 0.001 ${many}`;
-  const n =
-    x < 0.01 ? x.toFixed(3) : x < 1 ? x.toFixed(2) : x < 10 ? x.toFixed(1).replace(/\.0$/, '') : Math.round(x).toLocaleString('en-US');
+  const n = fmtCount(x);
   return `≈ ${n} ${n === '1' ? one : many}`;
 }
 
@@ -767,16 +856,15 @@ function legend(s, co2) {
   const t = s.tokens;
   const head = s.since ? `${s.periodLabel} · ${s.since}` : s.periodLabel;
   const hint = s.hint
-    ? `<div class="lg-hint">⚠ ${fmtTokens(s.hint.tokens)} context: ≈ ${co2 ? fmtCo2(s.hint.kg) : fmtLiters(s.hint.liters)} a reply</div>`
+    ? `<div class="lg-hint">⚠ ${fmtTokens(s.hint.tokens)} context: ≈ ${co2 ? co2Parts(s.hint.kg)[0] + ' ' + co2Parts(s.hint.kg)[1].split(' ')[0] : fmtLiters(s.hint.liters)} a reply</div>`
     : '';
-  const equiv =
-    co2 && amt.mid > 0
-      ? `<div>Like driving ${fmtNum(amt.mid * KM_PER_KG)} km, or ${
-          amt.mid / TREE_KG_YEAR >= 0.1
-            ? `${fmtNum(amt.mid / TREE_KG_YEAR)} trees absorbing for a year`
-            : `${Math.round(s.kwh.mid / PHONE_KWH).toLocaleString('en-US')} phone charges of electricity`
-        }</div>`
-      : '';
+  // Two more comparisons besides the one in the caption.
+  let equiv = '';
+  if (co2 && amt.mid > 0 && s.equiv) {
+    const shown = co2Unit(amt.mid, s.co2Unit, s.equiv);
+    const other = ['km', 'cigarette'].find((u) => u !== shown);
+    equiv = `<div>Also ≈ ${co2Say(amt.mid, other, s.equiv)}</div>`;
+  }
   $('legend').innerHTML = `
     <div class="lg-head">${esc(head)}</div>
     <div class="lg-big">${fmt(amt.mid)}</div>
@@ -1145,11 +1233,11 @@ function render(s) {
 
   const co2 = s.show === 'co2';
   setLook(co2);
-  // What fills the vessel: litres of water, or litres of CO₂ gas.
-  const A = co2 ? { lo: s.co2.lo * CO2_L_PER_KG, mid: s.co2.mid * CO2_L_PER_KG, hi: s.co2.hi * CO2_L_PER_KG } : s.liters;
+  // What fills the vessel: litres of water, or kilograms of CO₂.
+  const A = co2 ? s.co2 : s.liters;
   const layers = s.layers.map((l) => ({
     ...l,
-    v: co2 ? l.kg * CO2_L_PER_KG : l.liters,
+    v: co2 ? l.kg : l.liters,
     color: co2 ? smoke(l.color) : l.color,
     text: co2 ? fmtCo2(l.kg) : fmtLiters(l.liters),
   }));
@@ -1159,7 +1247,7 @@ function render(s) {
   let riseDelay = 0;
   if (!pouring || !cur.vessel) {
     const auto = !VESSELS[s.vessel];
-    const name = auto ? vesselFor(L) : s.vessel; // a chosen vessel, or grow with the amount
+    const name = auto ? vesselFor(co2 ? L * CO2_L_PER_KG : L) : s.vessel; // a chosen vessel, or grow with the amount
     if (name !== cur.vessel) {
       const from = cur.vessel;
       const grew =
@@ -1167,8 +1255,8 @@ function render(s) {
       if (grew) {
         cancelDrips();
         const nv = VESSELS[name];
-        const cap = capacityFor((L < 1 ? 1000 : 1) * L);
-        const y = nv.bottom - (nv.bottom - nv.top) * Math.min(((L < 1 ? 1000 : 1) * L) / cap, 1);
+        const kk = scaleFor(L, co2)[1];
+        const y = nv.bottom - (nv.bottom - nv.top) * Math.min((L * kk) / capacityFor(L * kk), 1);
         riseDelay = levelUp(from, name, y, co2 ? '#b4bac3' : layers.length ? layers[0].color : '#8fd6ff');
       }
       setVessel(name);
@@ -1177,8 +1265,7 @@ function render(s) {
     }
   }
   const v = VESSELS[cur.vessel];
-  const unit = L < 1 ? 'mL' : 'L';
-  const k = unit === 'mL' ? 1000 : 1;
+  const [unit, k] = scaleFor(L, co2);
   if (!pouring || !cur.cap) {
     const cap = capacityFor(L * k);
     if (cap !== cur.cap || unit !== cur.unit) {
@@ -1234,8 +1321,8 @@ function render(s) {
     $('caption').textContent = `reading logs ${s.progress.done}/${s.progress.total}`;
     $('period').textContent = '';
   } else {
-    const base = caption(L, cur.vessel);
-    $('caption').textContent = co2 && L > 0 && base.length <= 17 ? `${base} of CO₂` : base;
+    $('caption').textContent =
+      co2 && s.equiv ? (L > 0 ? `≈ ${co2Say(L, co2Unit(L, s.co2Unit, s.equiv), s.equiv)}` : 'empty') : caption(L, cur.vessel);
     const rate = co2 ? s.rateKg : s.rate;
     $('period').innerHTML = `<span class="pt">${esc(s.periodText)}</span>` + (rate > 0 ? `<span class="rate">&nbsp;· ▲ ${co2 ? fmtRateKg(rate) : fmtRate(rate)}</span>` : '');
   }

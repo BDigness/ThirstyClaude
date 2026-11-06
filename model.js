@@ -42,14 +42,15 @@ const TC_WATER = { allIn: { lo: 2, mid: 3, hi: 4 }, cooling: { lo: 0.15, mid: 0.
 // as used by EPA's Greenhouse Gas Equivalencies Calculator). Cleaner regional
 // grids ~0.25, dirtier ~0.45. Electricity only: no hardware manufacturing.
 const GRID_CO2 = { lo: 0.25, mid: 0.394, hi: 0.45 };
-// Everyday comparisons, from the same EPA calculator.
+// Everyday comparisons for CO₂ (kg CO₂ each).
 const CO2_EQUIV = {
-  carKgPerKm: 0.244, // average gasoline car: 393 g per mile
-  phoneKwh: 0.019, // energy to charge a smartphone once
-  treeKgPerYear: 60, // CO₂ taken up by one urban tree in a year
+  phoneKg: 0.019 * GRID_CO2.mid, // charging a smartphone: 0.019 kWh (EPA) on the average grid
+  cigaretteKg: 0.014, // one cigarette over its whole life cycle (Zafeiridou et al., 2018)
+  idleKgPerHour: 0.16 * 8.887, // a compact car idling: 0.16 gal/h (Argonne) × 8.887 kg CO₂ per gallon (EPA)
+  carKgPerKm: 0.244, // an average gasoline car: 393 g per mile (EPA)
+  tireKg: (25 / 2000) * 28 * 85.97, // burning a 25 lb passenger tire: 28 mmBtu/short ton × 85.97 kg CO₂/mmBtu (EPA, 40 CFR 98)
+  treeKgPerYear: 60, // taken up by one urban tree in a year (EPA)
 };
-// Volume of CO₂ gas at 20 °C and sea-level pressure.
-const CO2_LITERS_PER_KG = 547;
 
 function tcEstimate(fam, t, mode) {
   const mid = ((TC_FACTOR[fam] ?? 1) * (t.in * WH_PER_MTOK.in + t.out * WH_PER_MTOK.out + t.cw * WH_PER_MTOK.cw + t.cr * WH_PER_MTOK.cr)) / 1e6;
@@ -216,5 +217,4 @@ module.exports = {
   TC_WATER,
   GRID_CO2,
   CO2_EQUIV,
-  CO2_LITERS_PER_KG,
 };

@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { Worker } = require('worker_threads');
-const { estimate, collect, snapshot: tareSnapshot, familyOf, dayKey, addDays, zero, addTok } = require('./model');
+const { estimate, collect, snapshot: tareSnapshot, familyOf, dayKey, addDays, zero, addTok, CO2_EQUIV } = require('./model');
 
 // --empty        empties the cylinder (also works while ThirstyClaude is already running)
 // --demo         shows made-up numbers instead of reading your logs
@@ -68,7 +68,17 @@ const DEFAULTS = {
   sounds: false, // synthesised drip sounds
   ctxHint: 400000, // show a hint when the active session's context passes this (0 = off)
   shelf: 0, // jar shelf under the widget: 0 (off), 7 or 30 days
+  co2Unit: 'auto', // what CO₂ is counted in (see CO2_UNITS)
 };
+const CO2_UNITS = [
+  ['auto', 'Automatic'],
+  ['phone', 'Phone charges'],
+  ['cigarette', 'Cigarettes'],
+  ['idle', 'Car idling'],
+  ['km', 'Km driven'],
+  ['tire', 'Tires burned'],
+  ['tree', 'Trees for a year'],
+];
 const SHELVES = [
   [0, 'Off'],
   [7, 'Last 7 days'],
@@ -380,6 +390,8 @@ function push(events = []) {
       lastAt,
       busy,
       shelf: settings.shelf ? shelfDays(settings.shelf) : null,
+      co2Unit: settings.co2Unit,
+      equiv: CO2_EQUIV,
       kwh: { lo: est.wh.lo / 1000, mid: est.wh.mid / 1000, hi: est.wh.hi / 1000 },
       tokens: est.tokens,
       layers,
@@ -605,6 +617,14 @@ function buildMenu() {
       ],
     },
     {
+      label: 'Count CO₂ in',
+      enabled: settings.show === 'co2',
+      submenu: CO2_UNITS.map(([id, label], i) => [
+        { label, type: 'radio', checked: settings.co2Unit === id, click: () => set({ co2Unit: id }) },
+        ...(i === 0 ? [{ type: 'separator' }] : []),
+      ]).flat(),
+    },
+    {
       label: 'Estimate',
       submenu: [
         { label: 'ThirstyClaude (all token types)', type: 'radio', checked: settings.method === 'tc', click: () => set({ method: 'tc' }) },
@@ -805,6 +825,9 @@ if (!SNAPSHOT && !DEMO && !app.requestSingleInstanceLock()) {
     if (!CTX_HINTS.includes(settings.ctxHint)) settings.ctxHint = DEFAULTS.ctxHint;
     if (SHELF_ARG != null) settings.shelf = Number(SHELF_ARG);
     if (!(settings.shelf in SHELF_H)) settings.shelf = 0;
+    const UNIT_ARG = (arg('co2unit') || '').split('=')[1];
+    if (UNIT_ARG) settings.co2Unit = UNIT_ARG;
+    if (!CO2_UNITS.some(([id]) => id === settings.co2Unit)) settings.co2Unit = 'auto';
     if (SIZE_ARG && SIZES[SIZE_ARG]) settings.size = SIZE_ARG;
     if (VESSEL_ARG && VESSELS.some(([id]) => id === VESSEL_ARG)) settings.vessel = VESSEL_ARG;
     if (!SIZES[settings.size]) settings.size = 'medium';

@@ -5,9 +5,9 @@ your Claude Code (and Codex) token use. Each response drips in live. It can
 fill with the estimated CO₂ instead.
 
 <p>
-  <img src="docs/today.png" alt="Graduated cylinder at 6.6 L, filled in coloured layers by project (demo data)" width="150">
+  <img src="docs/today.png" alt="Graduated cylinder at 6.6 L under a dripping burette, filled in coloured layers by project (demo data)" width="150">
   <img src="docs/all-time.png" alt="Bathtub at 417 L with a rubber duck, and a shelf of seven daily jars below (demo data)" width="150">
-  <img src="docs/co2.png" alt="Swimming pool filled with grey billowing smoke, 55 kg CO₂e, with a context-size hint (demo data)" width="150">
+  <img src="docs/co2.png" alt="Swimming pool filling with grey smoke from an exhaust pipe: 55 kg CO₂e, about 1.8 tires burned (demo data)" width="150">
   <img src="docs/legend.png" alt="Hover legend with range, energy, tokens, projects and drop colours (demo data)" width="150">
 </p>
 
@@ -92,10 +92,22 @@ Developed on Windows. macOS and Linux should work but haven't been tested.
 - **Jar shelf** (menu): a row of jars under the widget, one per day for the last
   7 or 30 days, filled to that day's amount. Hover over a jar for its date and
   total. Today's jar is outlined.
-- **CO₂ mode.** Choose *Fill with → CO₂* and the vessel fills with grey smoke:
-  the estimated CO₂ as gas, about 547 L per kg (CO₂ is heavier than air, so it
-  settles). Drops become puffs, and the legend compares the amount to driving a
-  car or to trees absorbing it.
+- **Every vessel has a source.** Drops come from a dropper, a kitchen tap, a
+  burette, a garden spigot, a downspout, the bath tap, a hose or a rain cloud.
+- **CO₂ mode.** Choose *Fill with → CO₂* and the vessel fills with grey smoke
+  from an exhaust pipe. The amount is shown in grams or kilograms, and the
+  caption compares it to something you can picture. On *Automatic* it picks the
+  comparison that gives a readable number; *Count CO₂ in* can pin one.
+
+  | Amount | Counted in |
+  |---|---|
+  | under 50 g | phone charges |
+  | under 1 kg | cigarettes |
+  | under 30 kg | minutes or hours of car idling |
+  | under 600 kg | tires burned |
+  | more | trees absorbing it for a year |
+
+  Km driven is available too.
 - **⚠ Context hint.** Every reply re-reads the whole conversation, so a long
   session costs more per reply. When the active session's context passes 400K
   tokens, an amber line such as "⚠ 452K context · /compact?" appears. The
@@ -122,6 +134,7 @@ itself is for hovering). It remembers its position.
 | Empty / Drain | Named for what's showing: "Empty test tube", "Empty cylinder", "Drain bathtub" or "Drain pool". Pours the water out, so you can measure one task ("since 3:42 PM"). Your real totals keep counting. `thirstyclaude --empty` does the same from a terminal. |
 | Period | This session, today, last 7 days, last 30 days, all time, or since emptied. *This session* follows the newest session that has replied in the last 10 minutes, so it starts from zero whenever you open a new one. If no session is active, it shows the last one that replied. |
 | Fill with | Water, or CO₂ (carbon emissions). |
+| Count CO₂ in | Automatic, phone charges, cigarettes, car idling, km driven, tires burned, or trees for a year. |
 | Estimate | ThirstyClaude or EcoLogits (see below). |
 | Water counted | Including power plants, or data-center cooling only. |
 | Include Codex | Count Codex sessions as well as Claude Code. |
@@ -239,10 +252,16 @@ average including line losses (EPA eGRID2022), as used by EPA's
 - **Range:** the ThirstyClaude estimate also spans cleaner and dirtier grids
   (0.25–0.45 kg per kWh).
 - **Not included:** emissions from manufacturing the hardware.
-- **Comparisons**, also from EPA:
-  - An average gasoline car emits 393 g per mile (244 g per km).
-  - An urban tree absorbs about 60 kg a year.
-  - A phone charge uses 0.019 kWh.
+- **Comparisons** (CO₂ each):
+
+  | Comparison | CO₂ | Source |
+  |---|---|---|
+  | Phone charge | 7.5 g | 0.019 kWh per charge (EPA) on the average grid |
+  | Cigarette | 14 g | Whole life cycle ([Zafeiridou et al., 2018](https://spiral.imperial.ac.uk/handle/10044/1/61157)) |
+  | Car idling | 1.4 kg per hour | A compact car burns 0.16 gal/h at idle ([Argonne](https://afdc.energy.gov/files/pdfs/argonne_idling_handout.pdf)); gasoline gives 8.887 kg CO₂ per gallon (EPA) |
+  | Km driven | 244 g | Average gasoline car, 393 g per mile (EPA) |
+  | Tire burned | 30 kg | A 25 lb passenger tire; tire fuel is 28 mmBtu per short ton at 85.97 kg CO₂ per mmBtu ([EPA, 40 CFR 98](https://codes.findlaw.com/cfr/title-40-protection-of-environment/cfr-pt-40-98-subpt-c-tbl-c-1/)) |
+  | Tree for a year | 60 kg | One urban tree (EPA) |
 
 To use your own assumptions, edit the constants in [`model.js`](model.js).
 
@@ -264,6 +283,7 @@ Background reading:
 | `--size=large` | Starts at a size: `tiny`, `small`, `medium`, `large`, `xl` or `huge`. |
 | `--show=co2` | Starts filled with `water` or `co2`. |
 | `--sounds` | Turns drip sounds on. |
+| `--co2unit=tire` | Counts CO₂ in: `auto`, `phone`, `cigarette`, `idle`, `km`, `tire` or `tree`. |
 | `--shelf=7` | Shows the jar shelf: `0`, `7` or `30` days. |
 | `--statusline` | Prints the status line (see above) instead of starting the widget. |
 
