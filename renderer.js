@@ -10,7 +10,7 @@ let curCap = null;
 let curUnit = null;
 let prevLiters = null;
 let prevKey = null;
-let lastDrip = 0;
+let prevReq = null;
 let prevEmptied; // undefined until the first update arrives
 let pouringUntil = 0;
 let lastState = null;
@@ -85,42 +85,114 @@ function fmtTokens(n) {
   return String(n);
 }
 
-function drip(levelY) {
-  const now = Date.now();
-  if (now - lastDrip < 1500) return;
-  lastDrip = now;
-  const drop = document.createElementNS(NS, 'path');
-  drop.setAttribute('d', 'M0 -6 C2 -3 3 -1 0 1.5 C-3 -1 -2 -3 0 -6Z');
-  drop.setAttribute('fill', '#8fd6ff');
+// ── Drips: one per API response, forming at the rim, falling, then splashing ──
+const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const FORM_MS = 320;
+const DRIP_GAP_MS = 450;
+const MAX_QUEUED = 8;
+
+let surfaceY = BOTTOM; // where the water surface is drawn right now
+let pendingY = null;
+let levelTimer = null;
+let dripsQueued = 0;
+let dripTimer = null;
+
+const fallMs = (y) => 520 + 680 * Math.sqrt(Math.max(y - 4, 10) / 190);
+
+function applyLevel(y) {
+  surfaceY = y;
+  waterEl.style.transform = `translateY(${y.toFixed(2)}px)`;
+}
+
+// Moves the surface now, or after `delay` ms (so it rises when the first drop lands).
+function setLevel(y, delay) {
+  if (delay > 0 || levelTimer) {
+    pendingY = y;
+    if (!levelTimer) {
+      levelTimer = setTimeout(() => {
+        levelTimer = null;
+        applyLevel(pendingY);
+        pendingY = null;
+      }, delay);
+    }
+    return;
+  }
+  applyLevel(y);
+}
+
+function cancelDrips() {
+  clearTimeout(levelTimer);
+  levelTimer = null;
+  pendingY = null;
+  clearTimeout(dripTimer);
+  dripTimer = null;
+  dripsQueued = 0;
+}
+
+function queueDrips(n) {
+  dripsQueued = Math.min(dripsQueued + n, MAX_QUEUED);
+  if (!dripTimer) nextDrip();
+}
+
+function nextDrip() {
+  if (dripsQueued <= 0) {
+    dripTimer = null;
+    return;
+  }
+  dripsQueued--;
+  drip(surfaceY);
+  dripTimer = setTimeout(nextDrip, DRIP_GAP_MS);
+}
+
+function el(tag, attrs) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+
+function drip(y) {
+  const drop = el('path', { d: 'M0 -8 C2.6 -4 3.9 -1.3 0 2 C-3.9 -1.3 -2.6 -4 0 -8Z', fill: '#8fd6ff' });
+  drop.style.opacity = '0';
   $('drops').appendChild(drop);
+  const fall = fallMs(y);
+  const total = FORM_MS + fall;
   const a = drop.animate(
     [
-      { transform: `translate(${CENTER_X}px, -4px)`, opacity: 0 },
-      { transform: `translate(${CENTER_X}px, 8px)`, opacity: 1, offset: 0.15 },
-      { transform: `translate(${CENTER_X}px, ${levelY - 2}px)`, opacity: 1 },
+      { transform: `translate(${CENTER_X}px, 3px) scale(0.2)`, opacity: 0, easing: 'ease-out' },
+      { transform: `translate(${CENTER_X}px, 4px) scale(1)`, opacity: 1, offset: FORM_MS / total, easing: 'cubic-bezier(.55,0,1,.45)' },
+      { transform: `translate(${CENTER_X}px, ${y - 3}px) scale(0.85, 1.3)`, opacity: 1 },
     ],
-    { duration: 750, easing: 'cubic-bezier(.5,0,1,1)' }
+    { duration: total, fill: 'both' }
   );
   a.onfinish = () => {
     drop.remove();
-    const r = document.createElementNS(NS, 'ellipse');
-    r.setAttribute('class', 'ripple');
-    r.setAttribute('cx', String(CENTER_X));
-    r.setAttribute('cy', String(levelY));
-    r.setAttribute('rx', '2');
-    r.setAttribute('ry', '0.8');
-    r.setAttribute('fill', 'none');
-    r.setAttribute('stroke', '#c4e9ff');
-    r.setAttribute('stroke-width', '0.6');
-    $('drops').appendChild(r);
-    const ra = r.animate([{ transform: 'scale(1)', opacity: 0.9 }, { transform: 'scale(8, 3)', opacity: 0 }], { duration: 700, easing: 'ease-out' });
-    ra.onfinish = () => r.remove();
+    splash(y);
   };
+}
+
+function splash(y) {
+  const ripple = el('ellipse', { class: 'ripple', cx: CENTER_X, cy: y, rx: 2, ry: 0.8, fill: 'none', stroke: '#c4e9ff', 'stroke-width': 0.6 });
+  $('drops').appendChild(ripple);
+  ripple.animate([{ transform: 'scale(1)', opacity: 0.9 }, { transform: 'scale(9, 3)', opacity: 0 }], { duration: 800, easing: 'ease-out' }).onfinish = () =>
+    ripple.remove();
+  for (const dx of [-1, 1]) {
+    const bead = el('circle', { r: 1.1, fill: '#bfe6ff' });
+    $('drops').appendChild(bead);
+    bead.animate(
+      [
+        { transform: `translate(${CENTER_X}px, ${y}px)`, opacity: 0.95, easing: 'ease-out' },
+        { transform: `translate(${CENTER_X + dx * 5}px, ${y - 7}px)`, opacity: 0.9, offset: 0.45, easing: 'ease-in' },
+        { transform: `translate(${CENTER_X + dx * 8}px, ${y - 1}px)`, opacity: 0 },
+      ],
+      { duration: 520, fill: 'both' }
+    ).onfinish = () => bead.remove();
+  }
 }
 
 // Tips the cylinder and spills the water out; the level drains to zero meanwhile.
 function pour() {
   pouringUntil = Date.now() + 1600;
+  cancelDrips();
   $('rig').animate(
     [
       { transform: 'rotate(0deg)' },
@@ -165,7 +237,18 @@ function render(s) {
   if (!pouring && (cap !== curCap || unit !== curUnit)) drawTicks(cap, unit);
 
   const levelY = pouring ? BOTTOM : BOTTOM - (BOTTOM - FULL_Y) * Math.min(v / cap, 1);
-  waterEl.style.transform = `translateY(${levelY.toFixed(2)}px)`;
+  const key = `${s.period}|${s.mode}|${s.emptiedAt}`;
+  const rose = !s.scanning && !pouring && prevLiters !== null && key === prevKey && L > prevLiters;
+  if (rose && !REDUCED_MOTION) {
+    // One drip per new response; the surface rises when the first drop lands.
+    const responses = Math.max(1, s.totals.req - (prevReq ?? s.totals.req));
+    if (!dripTimer && !levelTimer) setLevel(levelY, FORM_MS + fallMs(surfaceY));
+    else setLevel(levelY, 0);
+    queueDrips(responses);
+  } else {
+    if (pouring) cancelDrips();
+    setLevel(levelY, 0);
+  }
   if (v > 0 && !pouring) {
     clearTimeout(fadeTimer);
     fadeTimer = null;
@@ -194,9 +277,8 @@ function render(s) {
     'Rough estimate. Right-click for options.',
   ].join('\n');
 
-  const key = `${s.period}|${s.mode}|${s.emptiedAt}`;
-  if (!s.scanning && !pouring && prevLiters !== null && key === prevKey && L > prevLiters) drip(levelY);
   prevLiters = L;
+  prevReq = s.totals.req;
   prevKey = key;
 }
 

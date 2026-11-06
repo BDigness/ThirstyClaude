@@ -158,8 +158,57 @@ function post(scanning, progress) {
 
 const tick = () => new Promise((r) => setImmediate(r));
 
+let files = [];
+let known = new Set();
+
+function relist() {
+  files = allFiles();
+  known = new Set(files);
+}
+
+// Instant updates: watch the log folders and read a file as soon as it changes.
+// The 5-second poll stays as a fallback for missed events.
+const watched = new Set();
+const queued = new Set();
+let queueTimer = null;
+
+function queueFile(file) {
+  queued.add(file);
+  if (!queueTimer) queueTimer = setTimeout(flushQueue, 120);
+}
+
+function flushQueue() {
+  queueTimer = null;
+  let changed = false;
+  for (const f of queued) {
+    if (!known.has(f)) {
+      known.add(f);
+      files.push(f);
+    }
+    if (processFile(f)) changed = true;
+  }
+  queued.clear();
+  if (changed) post(false, null);
+}
+
+function watchRoots() {
+  for (const r of roots) {
+    if (watched.has(r)) continue;
+    try {
+      const w = fs.watch(r, { recursive: true }, (_ev, name) => {
+        if (name && String(name).endsWith('.jsonl')) queueFile(path.join(r, String(name)));
+      });
+      w.on('error', () => {
+        w.close();
+        watched.delete(r); // retried at the next re-listing
+      });
+      watched.add(r);
+    } catch {}
+  }
+}
+
 async function run() {
-  let files = allFiles();
+  relist();
   const total = files.length;
   let last = 0;
   for (let i = 0; i < files.length; i++) {
@@ -173,11 +222,15 @@ async function run() {
   }
   post(false, { done: total, total });
   save(true);
+  watchRoots();
 
   let polls = 0;
   setInterval(() => {
     polls++;
-    if (polls % RELIST_EVERY === 0) files = allFiles();
+    if (polls % RELIST_EVERY === 0) {
+      relist();
+      watchRoots();
+    }
     let changed = false;
     for (const f of files) if (processFile(f)) changed = true;
     if (changed) post(false, null);

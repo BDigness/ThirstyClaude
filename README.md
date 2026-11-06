@@ -29,6 +29,8 @@ Developed on Windows. macOS and Linux should work but haven't been tested.
 
 ## Use
 
+- Each Claude response adds one drop, within a fraction of a second of being
+  written to the log. Busy stretches look like a steady drip.
 - Drag the cylinder anywhere. It remembers its position.
 - **Empty cylinder** pours the water out so you can measure a single task. The
   cylinder then shows only what you use from that moment ("since 3:42 PM"). Your
