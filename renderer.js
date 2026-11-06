@@ -1290,7 +1290,8 @@ function renderScene(s, key, pouring) {
   const rose = !s.scanning && prevLiters !== null && key === prevKey && kg > prevLiters;
   const grew = rose && sceneState.unit !== null && unit !== sceneState.unit && SCENE_LADDER.indexOf(unit) > SCENE_LADDER.indexOf(sceneState.unit);
   if (unit !== sceneState.unit) cancelDrips();
-  showScene(unit, sceneCount(kg, unit, q), { lit: kg > 0, grew });
+  // Over 20 minutes of idling an hour, the duck is knocked out.
+  showScene(unit, sceneCount(kg, unit, q), { lit: kg > 0, grew, ko: (s.rateKg || 0) > q.idleKgPerHour / 3 });
   if (rose && !grew && !REDUCED_MOTION) queueDrips(newEvents(s));
 }
 

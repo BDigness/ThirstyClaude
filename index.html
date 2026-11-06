@@ -201,6 +201,9 @@
   @keyframes scRoad { to { stroke-dashoffset: 16; } }
   .sc-speed path { stroke: rgba(234, 241, 251, .45); stroke-width: 1; stroke-linecap: round; animation: scSpeed .6s linear infinite; }
   @keyframes scSpeed { from { transform: translateX(6px); opacity: 0; } 30% { opacity: 1; } to { transform: translateX(-14px); opacity: 0; } }
+  .dk-x { display: none; }
+  .sc-ko .dk-x { display: inline; }
+  .sc-ko .dk-eye { display: none; }
   .sc-duck { transform-box: fill-box; transform-origin: 50% 100%; animation: scDuck 2.8s ease-in-out infinite alternate; }
   @keyframes scDuck { from { transform: rotate(-3deg); } to { transform: rotate(3deg); } }
   .sc-crown { transform-box: fill-box; transform-origin: 50% 100%; animation: scSway 5.5s ease-in-out infinite alternate; }

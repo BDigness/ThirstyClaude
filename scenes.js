@@ -109,13 +109,17 @@ const DUCK_BODY = `
     <ellipse cx="0" cy="-1.3" rx="6.2" ry="3.5" fill="#f6c445"/>
     <path d="M-2.8 -2.3 Q0 -4.2 2.4 -2.2" fill="none" stroke="#d29a22" stroke-width="0.7" stroke-linecap="round"/>
     <circle cx="3.7" cy="-6" r="2.7" fill="#f6c445"/>`;
+// Each eye has an X version, shown when the duck is knocked out (see .sc-ko).
 const DUCK_FACE = `
     <path d="M6 -6.4 L8.7 -5.6 L6 -4.7 Z" fill="#f08a24"/>
-    <circle cx="4.5" cy="-6.6" r="0.5" fill="#1b1f27"/>`;
+    <circle class="dk-eye" cx="4.5" cy="-6.6" r="0.5" fill="#1b1f27"/>
+    <path class="dk-x" d="M3.5 -7.6 L5.5 -5.6 M5.5 -7.6 L3.5 -5.6" stroke="#1b1f27" stroke-width="0.7" stroke-linecap="round"/>`;
 const DUCK_MASK = `
     <path d="M1.1 -7.6 Q3.4 -9.5 5.6 -8.1 M1.1 -5.2 L4.2 -4.4" fill="none" stroke="#2b2f36" stroke-width="0.7" stroke-linecap="round"/>
     <path d="M4.1 -8.3 Q7.5 -8.7 7.7 -5.7 Q7.7 -3.4 5.3 -3.5 Q3.6 -3.7 3.7 -5.8 Z" fill="#3d434c"/>
-    <circle cx="5.4" cy="-6.6" r="1.15" fill="#bfe3ff" fill-opacity="0.9" stroke="#1b1f27" stroke-width="0.35"/>
+    <circle cx="5.4" cy="-6.6" r="1.35" fill="#bfe3ff" fill-opacity="0.9" stroke="#1b1f27" stroke-width="0.35"/>
+    <circle class="dk-eye" cx="5.4" cy="-6.6" r="0.42" fill="#1b1f27"/>
+    <path class="dk-x" d="M4.6 -7.4 L6.2 -5.8 M6.2 -7.4 L4.6 -5.8" stroke="#1b1f27" stroke-width="0.55" stroke-linecap="round"/>
     <circle cx="8.4" cy="-4.4" r="1.5" fill="#6b717a" stroke="#2b2f36" stroke-width="0.4"/>
     <path d="M7.7 -4.9 H9.1 M7.6 -3.9 H9.2" stroke="#2b2f36" stroke-width="0.3"/>`;
 // Its base sits at x y; k is the size (1 = the bath duck), flip faces it left.
@@ -496,8 +500,9 @@ function treeSvg(i, young) {
 const sceneState = { unit: null, r: {} };
 
 // unit: which scene; n: how many; lit: false when there's nothing yet, so
-// nothing is burning; grew: the automatic choice just moved up the ladder.
-function showScene(unit, n, { lit = true, grew = false } = {}) {
+// nothing is burning; grew: the automatic choice just moved up the ladder;
+// ko: X eyes for the duck.
+function showScene(unit, n, { lit = true, grew = false, ko = false } = {}) {
   const def = SCENES[unit] || SCENES.cigarette;
   const art = $('sceneArt');
   if (unit !== sceneState.unit) {
@@ -513,6 +518,7 @@ function showScene(unit, n, { lit = true, grew = false } = {}) {
     def.update(Math.max(0, n), sceneState.r, true);
   }
   art.classList.toggle('sc-off', !lit);
+  art.classList.toggle('sc-ko', ko);
 }
 
 function sceneEvent(e) {
