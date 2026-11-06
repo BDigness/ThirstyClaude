@@ -136,10 +136,12 @@
       <g id="behind"></g>
       <g clip-path="url(#vclip)">
         <g id="water" style="transform: translateY(206px); opacity: 0">
-          <path id="waveBack" class="wave back"/>
-          <g id="bands"></g>
-          <rect x="-10" y="0" width="160" height="240" fill="url(#depth)"/>
-          <path id="waveFront" class="wave"/>
+          <g id="slosh">
+            <g id="chopBack"><path id="waveBack" class="wave back"/></g>
+            <g id="bands"></g>
+            <rect x="-10" y="0" width="160" height="240" fill="url(#depth)"/>
+            <g id="chopFront"><path id="waveFront" class="wave"/></g>
+          </g>
         </g>
         <g id="range">
           <rect id="rangeFill" x="-10" width="160" fill="#fff" fill-opacity="0.07"/>

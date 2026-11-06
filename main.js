@@ -327,6 +327,10 @@ function createWindow() {
   });
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (e) => e.preventDefault());
+  // Window position while it's being dragged, so the water can slosh.
+  win.on('move', () => {
+    if (!win.isDestroyed()) win.webContents.send('pos', win.getPosition());
+  });
   win.on('moved', () => {
     const [x, y] = win.getPosition();
     settings.x = x;

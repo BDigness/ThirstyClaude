@@ -48,6 +48,9 @@ Developed on Windows. macOS and Linux should work but haven't been tested.
   |---|---|---|---|---|
   | violet | red | green | magenta | amber |
 
+- **Drag it around and the water sloshes.** It leans against the motion, surges
+  when you stop, and settles. Glassware rocks quickly; the bathtub and pool sway
+  slowly.
 - **The faint band is the likely range.** Every estimate here is uncertain, so the
   band shows how low or high it could plausibly be.
 - **▲ L/h is the flow rate:** your usage over the last 10 minutes, scaled to an

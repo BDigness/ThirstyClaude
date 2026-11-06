@@ -421,6 +421,81 @@ function legend(s) {
     <div class="lg-foot">Small drops are subagents. Band = likely range.<br>${method}, ${water}.</div>`;
 }
 
+// ── Slosh: the water tilts and settles when the widget is dragged ───────────
+// A damped spring per vessel: the surface leans against the window's
+// acceleration (like water in a carried glass), overshoots, and settles.
+// Narrow glassware rocks quickly; the tub and pool sway slowly.
+const SLOSH = {
+  tube: { hz: 2.3, max: 22, cx: 79, damping: 0.1 },
+  cylinder: { hz: 1.9, max: 18, cx: 79, damping: 0.1 },
+  tub: { hz: 0.95, max: 9, cx: 69, damping: 0.08 },
+  pool: { hz: 0.6, max: 5, cx: 69, damping: 0.07 },
+};
+const G = 21000; // px/s²: a brisk drag tilts the water a few degrees
+const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+const motion = { last: null, vx: 0, vy: 0, pvx: 0, pvy: 0, lastEvent: 0, t: 0, th: 0, w: 0, b: 0, bv: 0, running: false };
+
+function onMove([x, y]) {
+  if (REDUCED_MOTION) return;
+  const now = performance.now();
+  if (!motion.last || now - motion.last.now > 200) {
+    motion.vx = motion.vy = 0; // a new drag starts from rest
+  } else {
+    const dt = Math.max(0.008, (now - motion.last.now) / 1000);
+    motion.vx += ((x - motion.last.x) / dt - motion.vx) * 0.5;
+    motion.vy += ((y - motion.last.y) / dt - motion.vy) * 0.5;
+  }
+  motion.last = { x, y, now };
+  motion.lastEvent = now;
+  if (!motion.running) {
+    motion.running = true;
+    motion.t = now;
+    motion.pvx = motion.vx;
+    motion.pvy = motion.vy;
+    requestAnimationFrame(sloshStep);
+  }
+}
+
+function sloshStep(now) {
+  const dt = Math.min(0.05, Math.max(0.001, (now - motion.t) / 1000));
+  motion.t = now;
+  if (now - motion.lastEvent > 60) {
+    // No movement reported: the window has stopped.
+    const decay = Math.exp(-dt / 0.035);
+    motion.vx *= decay;
+    motion.vy *= decay;
+  }
+  const ax = (motion.vx - motion.pvx) / dt;
+  const ay = (motion.vy - motion.pvy) / dt;
+  motion.pvx = motion.vx;
+  motion.pvy = motion.vy;
+
+  const s = SLOSH[cur.vessel] || SLOSH.cylinder;
+  const om = 2 * Math.PI * s.hz;
+  const eq = clamp((Math.atan(clamp(ax, -60000, 60000) / G) * 180) / Math.PI, -s.max, s.max);
+  motion.w += (-om * om * (motion.th - eq) - 2 * s.damping * om * motion.w) * dt;
+  motion.th = clamp(motion.th + motion.w * dt, -s.max * 1.3, s.max * 1.3);
+  const ob = om * 1.3;
+  const beq = clamp(ay * 0.00025, -4, 4);
+  motion.bv += (-ob * ob * (motion.b - beq) - 2 * 0.12 * ob * motion.bv) * dt;
+  motion.b = clamp(motion.b + motion.bv * dt, -6, 6);
+
+  const chop = 1 + Math.min(2.2, Math.abs(motion.w) * 0.012 + Math.abs(motion.th - eq) * 0.06);
+  $('slosh').setAttribute('transform', `translate(0 ${motion.b.toFixed(2)}) rotate(${motion.th.toFixed(2)} ${s.cx} 0)`);
+  $('chopFront').setAttribute('transform', `scale(1 ${chop.toFixed(2)})`);
+  $('chopBack').setAttribute('transform', `scale(1 ${chop.toFixed(2)})`);
+
+  const settled =
+    now - motion.lastEvent > 400 && Math.abs(motion.th) < 0.05 && Math.abs(motion.w) < 0.5 && Math.abs(motion.b) < 0.05 && Math.abs(motion.bv) < 0.5;
+  if (settled) {
+    for (const id of ['slosh', 'chopFront', 'chopBack']) $(id).removeAttribute('transform');
+    motion.th = motion.w = motion.b = motion.bv = 0;
+    motion.running = false;
+    return;
+  }
+  requestAnimationFrame(sloshStep);
+}
+
 // ── Render ──────────────────────────────────────────────────────────────────
 let lastState = null;
 let prevLiters = null;
@@ -501,6 +576,7 @@ function render(s) {
 }
 
 window.thirsty.onUpdate(render);
+window.thirsty.onMove(onMove);
 const card = $('card');
 $('info').addEventListener('mouseenter', () => card.classList.add('show-legend'));
 $('info').addEventListener('mouseleave', () => card.classList.remove('show-legend'));
