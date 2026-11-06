@@ -46,6 +46,7 @@
   .wave.back { animation-duration: 5.5s; animation-direction: reverse; opacity: 0.55; }
   @keyframes drift { from { transform: translateX(0); } to { transform: translateX(-24px); } }
   .ripple { transform-box: fill-box; transform-origin: center; }
+  #rig { transform-box: view-box; transform-origin: 79px 228px; }
   @media (prefers-reduced-motion: reduce) {
     .wave { animation: none; }
     #water { transition: none; }
@@ -68,6 +69,7 @@
       <clipPath id="tube"><rect x="58.5" y="12" width="41" height="196" rx="2"/></clipPath>
     </defs>
 
+    <g id="rig">
     <rect x="58" y="12" width="42" height="197" fill="url(#glassGrad)"/>
     <g clip-path="url(#tube)">
       <g id="water" style="transform: translateY(206px); opacity: 0">
@@ -85,6 +87,8 @@
     <rect x="60" y="209" width="38" height="9" fill="var(--glass-fill)" stroke="var(--glass)" stroke-width="1"/>
     <path d="M40 218 H118 L127 231 H31 Z" fill="var(--glass-fill)" stroke="var(--glass)" stroke-width="1.1" stroke-linejoin="round"/>
     <g id="drops"></g>
+    </g>
+    <g id="spill"></g>
   </svg>
   <div class="info" id="info">
     <div id="liters">…</div>

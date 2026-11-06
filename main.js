@@ -3,12 +3,14 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { Worker } = require('worker_threads');
-const { liters, dayKey, L_PER_KWH } = require('./model');
+const { liters, dayKey, addDays, totalsFor, L_PER_KWH } = require('./model');
 
+// --empty        empties the cylinder (also works while ThirstyClaude is already running)
 // --demo         shows made-up numbers instead of reading your logs
 // --snapshot=f   renders once, saves f (PNG) and a JSON summary next to it, then exits
 const arg = (name) => process.argv.find((a) => a === `--${name}` || a.startsWith(`--${name}=`));
 const DEMO = Boolean(arg('demo'));
+const EMPTY_ON_START = Boolean(arg('empty'));
 const SNAPSHOT = (arg('snapshot') || '').split('=').slice(1).join('=') || null;
 
 // Local-only app: keep Chromium's background networking off.
@@ -22,8 +24,19 @@ const PERIODS = [
   ['week', 'Last 7 days'],
   ['month', 'Last 30 days'],
   ['all', 'All time'],
+  ['since', 'Since emptied'],
 ];
-const DEFAULTS = { period: 'all', mode: 'allIn', size: 'medium', alwaysOnTop: true, visible: true, x: null, y: null };
+const DEFAULTS = {
+  period: 'all',
+  mode: 'allIn',
+  size: 'medium',
+  alwaysOnTop: true,
+  visible: true,
+  x: null,
+  y: null,
+  tare: null, // all-time totals at the moment the cylinder was last emptied
+  emptiedAt: null,
+};
 const LOGIN_LABEL = process.platform === 'darwin' ? 'Open at login' : 'Start with Windows';
 
 let win = null;
@@ -34,6 +47,7 @@ let days = {};
 let scanning = true;
 let progress = { done: 0, total: 0 };
 let quitting = false;
+let pendingEmpty = EMPTY_ON_START;
 
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 const stateFile = () => path.join(app.getPath('userData'), 'state.json');
@@ -70,25 +84,34 @@ function set(patch) {
 }
 
 // ── Totals ──────────────────────────────────────────────────────────────────
-function addDays(d, n) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
+function totals(period = settings.period) {
+  const t = totalsFor(days, period, settings.tare);
+  return { ...t, tokens: t.in + t.out + t.cw + t.cr, liters: liters(t.wh, settings.mode) };
 }
 
-function totals(period = settings.period) {
-  const now = new Date();
-  const from =
-    period === 'today' ? dayKey(now)
-    : period === 'week' ? dayKey(addDays(now, -6))
-    : period === 'month' ? dayKey(addDays(now, -29))
-    : null;
-  const t = { in: 0, out: 0, cw: 0, cr: 0, req: 0, wh: 0 };
-  for (const k in days) {
-    if (from && k < from) continue;
-    for (const f in t) t[f] += days[k][f] || 0;
+// Empties the cylinder: the view restarts from zero, the real totals keep counting.
+function empty() {
+  if (scanning) {
+    pendingEmpty = true; // wait until the logs are read, or the snapshot would be partial
+    return;
   }
-  return { ...t, tokens: t.in + t.out + t.cw + t.cr, liters: liters(t.wh, settings.mode) };
+  pendingEmpty = false;
+  set({ tare: totalsFor(days, 'all', null), emptiedAt: Date.now(), period: 'since' });
+}
+
+function sinceText(ts) {
+  const d = new Date(ts);
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return dayKey(d) === dayKey(new Date()) ? time : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
+}
+
+function periodLabels() {
+  if (settings.period === 'since' && settings.emptiedAt) {
+    const when = sinceText(settings.emptiedAt);
+    return { label: `Since ${when}`, text: `since ${when}` };
+  }
+  const label = PERIODS.find(([id]) => id === settings.period)[1];
+  return { label, text: label.toLowerCase() };
 }
 
 function fmtLiters(l) {
@@ -99,13 +122,15 @@ function fmtLiters(l) {
 
 function push() {
   const t = totals();
-  const label = PERIODS.find(([id]) => id === settings.period)[1];
-  if (tray) tray.setToolTip(`ThirstyClaude: ${fmtLiters(t.liters)} (${label.toLowerCase()})`);
+  const { label, text } = periodLabels();
+  if (tray) tray.setToolTip(`ThirstyClaude: ${fmtLiters(t.liters)} (${text})`);
   if (win && !win.isDestroyed()) {
     win.webContents.send('update', {
       totals: t,
       period: settings.period,
       periodLabel: label,
+      periodText: text,
+      emptiedAt: settings.emptiedAt,
       mode: settings.mode,
       lPerKwh: L_PER_KWH[settings.mode],
       scanning,
@@ -240,10 +265,11 @@ function buildMenu() {
         ];
   return Menu.buildFromTemplate([
     { label: 'Show cylinder', type: 'checkbox', checked: win.isVisible(), click: toggleVisible },
+    { label: 'Empty cylinder', enabled: !scanning, click: empty },
     { type: 'separator' },
     {
       label: 'Period',
-      submenu: PERIODS.map(([id, label]) => ({
+      submenu: PERIODS.filter(([id]) => id !== 'since' || settings.emptiedAt).map(([id, label]) => ({
         label,
         type: 'radio',
         checked: settings.period === id,
@@ -315,7 +341,8 @@ function startWorker() {
       const finished = scanning && !m.scanning;
       scanning = m.scanning;
       push();
-      if (finished && SNAPSHOT) setTimeout(snapshot, 2500);
+      if (finished && pendingEmpty) empty();
+      if (finished && SNAPSHOT) setTimeout(snapshot, EMPTY_ON_START ? 7000 : 2500);
     } else if (m.type === 'flushed' && quitting) {
       app.exit(0);
     }
@@ -328,7 +355,20 @@ function startDemo() {
   scanning = false;
   progress = { done: 1, total: 1 };
   push();
-  if (SNAPSHOT) setTimeout(snapshot, 2500);
+  if (pendingEmpty) empty();
+  // A little made-up usage every few seconds, so the drip and refill can be seen.
+  setInterval(() => {
+    const k = dayKey(new Date());
+    const d = days[k] || (days[k] = { in: 0, out: 0, cw: 0, cr: 0, req: 0, wh: 0 });
+    const wh = 3 + Math.random() * 6;
+    d.wh += wh;
+    d.req += 1;
+    d.out += Math.round(wh * 180);
+    d.cw += Math.round(wh * 1300);
+    d.cr += Math.round(wh * 80000);
+    push();
+  }, 3000);
+  if (SNAPSHOT) setTimeout(snapshot, EMPTY_ON_START ? 7000 : 2500);
 }
 
 async function snapshot() {
@@ -350,11 +390,12 @@ function quit() {
 if (!SNAPSHOT && !DEMO && !app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_e, argv) => {
     if (win) {
       win.showInactive();
       set({ visible: true });
     }
+    if (argv.includes('--empty')) empty();
   });
   app.whenReady().then(() => {
     // Refuse every request that isn't a local file, and every permission prompt.

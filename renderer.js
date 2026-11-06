@@ -11,6 +11,10 @@ let curUnit = null;
 let prevLiters = null;
 let prevKey = null;
 let lastDrip = 0;
+let prevEmptied; // undefined until the first update arrives
+let pouringUntil = 0;
+let lastState = null;
+let fadeTimer = null;
 
 // Wavelength matches the 24px drift animation so the loop is seamless.
 function wavePath(amp, len, phase = 0, dy = 0) {
@@ -114,22 +118,70 @@ function drip(levelY) {
   };
 }
 
+// Tips the cylinder and spills the water out; the level drains to zero meanwhile.
+function pour() {
+  pouringUntil = Date.now() + 1600;
+  $('rig').animate(
+    [
+      { transform: 'rotate(0deg)' },
+      { transform: 'rotate(-10deg)', offset: 0.3 },
+      { transform: 'rotate(-10deg)', offset: 0.65 },
+      { transform: 'rotate(0deg)' },
+    ],
+    { duration: 1600, easing: 'ease-in-out' }
+  );
+  for (let i = 0; i < 6; i++) {
+    const drop = document.createElementNS(NS, 'path');
+    drop.setAttribute('d', 'M0 -4 C1.4 -2 2 -0.7 0 1 C-2 -0.7 -1.4 -2 0 -4Z');
+    drop.setAttribute('fill', '#8fd6ff');
+    drop.style.opacity = '0';
+    $('spill').appendChild(drop);
+    const x0 = 13 + Math.random() * 4;
+    const x1 = 6 + Math.random() * 10;
+    const a = drop.animate(
+      [
+        { transform: `translate(${x0}px, 18px)`, opacity: 0.95 },
+        { transform: `translate(${x1}px, 214px)`, opacity: 0 },
+      ],
+      { duration: 650 + Math.random() * 200, delay: 380 + i * 110, easing: 'cubic-bezier(.5,0,1,1)', fill: 'both' }
+    );
+    a.onfinish = () => drop.remove();
+  }
+  setTimeout(() => lastState && render(lastState), 1650);
+}
+
 function render(s) {
+  lastState = s;
+  if (prevEmptied !== undefined && s.emptiedAt && s.emptiedAt !== prevEmptied) pour();
+  prevEmptied = s.emptiedAt;
+  const pouring = Date.now() < pouringUntil;
+
   const L = s.totals.liters;
   const small = L < 1;
   const unit = small ? 'mL' : 'L';
   const v = small ? L * 1000 : L;
   const cap = capacityFor(v);
-  if (cap !== curCap || unit !== curUnit) drawTicks(cap, unit);
+  // Keep the old scale while the water drains, then switch.
+  if (!pouring && (cap !== curCap || unit !== curUnit)) drawTicks(cap, unit);
 
-  const levelY = BOTTOM - (BOTTOM - FULL_Y) * Math.min(v / cap, 1);
+  const levelY = pouring ? BOTTOM : BOTTOM - (BOTTOM - FULL_Y) * Math.min(v / cap, 1);
   waterEl.style.transform = `translateY(${levelY.toFixed(2)}px)`;
-  waterEl.style.opacity = v > 0 ? '1' : '0';
+  if (v > 0 && !pouring) {
+    clearTimeout(fadeTimer);
+    fadeTimer = null;
+    waterEl.style.opacity = '1';
+  } else if (!fadeTimer && waterEl.style.opacity !== '0') {
+    // Fade only after the drain finishes, so the level can be seen dropping.
+    fadeTimer = setTimeout(() => {
+      waterEl.style.opacity = '0';
+      fadeTimer = null;
+    }, 1300);
+  }
 
   $('liters').textContent = s.scanning && L === 0 ? '…' : fmtLiters(L);
   $('sub').textContent = s.scanning
     ? `reading logs ${s.progress.done}/${s.progress.total}`
-    : `${fmtTokens(s.totals.tokens)} tokens · ${s.periodLabel.toLowerCase()}`;
+    : `${fmtTokens(s.totals.tokens)} tokens · ${s.periodText}`;
 
   const t = s.totals;
   $('info').title = [
@@ -142,8 +194,8 @@ function render(s) {
     'Rough estimate. Right-click for options.',
   ].join('\n');
 
-  const key = s.period + s.mode;
-  if (!s.scanning && prevLiters !== null && key === prevKey && L > prevLiters) drip(levelY);
+  const key = `${s.period}|${s.mode}|${s.emptiedAt}`;
+  if (!s.scanning && !pouring && prevLiters !== null && key === prevKey && L > prevLiters) drip(levelY);
   prevLiters = L;
   prevKey = key;
 }

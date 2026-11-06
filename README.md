@@ -30,8 +30,13 @@ Developed on Windows. macOS and Linux should work but haven't been tested.
 ## Use
 
 - Drag the cylinder anywhere. It remembers its position.
+- **Empty cylinder** pours the water out so you can measure a single task. The
+  cylinder then shows only what you use from that moment ("since 3:42 PM"). Your
+  real totals keep counting, and Today, 30 days and All time are unaffected.
+  From a terminal, `thirstyclaude --empty` does the same, even while it's
+  already running.
 - Right-click it, or the tray icon, for options:
-  - period: today, last 7 days, last 30 days, all time
+  - period: today, last 7 days, last 30 days, all time, since emptied
   - which water to count
   - size
   - always on top

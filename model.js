@@ -32,4 +32,29 @@ function dayKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-module.exports = { energyWh, liters, dayKey, L_PER_KWH };
+function addDays(d, n) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+const FIELDS = ['in', 'out', 'cw', 'cr', 'req', 'wh'];
+
+// Sums per-day totals for a period. 'since' is everything counted after the
+// cylinder was emptied: the all-time total minus the snapshot (tare) taken then.
+function totalsFor(days, period, tare, now = new Date()) {
+  const from =
+    period === 'today' ? dayKey(now)
+    : period === 'week' ? dayKey(addDays(now, -6))
+    : period === 'month' ? dayKey(addDays(now, -29))
+    : null;
+  const t = { in: 0, out: 0, cw: 0, cr: 0, req: 0, wh: 0 };
+  for (const k in days) {
+    if (from && k < from) continue;
+    for (const f of FIELDS) t[f] += days[k][f] || 0;
+  }
+  if (period === 'since' && tare) for (const f of FIELDS) t[f] = Math.max(0, t[f] - (tare[f] || 0));
+  return t;
+}
+
+module.exports = { energyWh, liters, dayKey, addDays, totalsFor, L_PER_KWH };
