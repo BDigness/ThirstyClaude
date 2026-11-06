@@ -17,6 +17,7 @@ const PERIOD_ARG = (arg('period') || '').split('=')[1] || null;
 // --size=tiny|small|medium|large|xl|huge   --vessel=auto|tube|cylinder|tub|pool
 const SIZE_ARG = (arg('size') || '').split('=')[1] || null;
 const VESSEL_ARG = (arg('vessel') || '').split('=')[1] || null;
+const SHOW_ARG = (arg('show') || '').split('=')[1] || null; // water | co2
 
 // Local-only app: keep Chromium's background networking off.
 app.commandLine.appendSwitch('disable-background-networking');
@@ -41,6 +42,7 @@ const VESSELS = [
   ['pool', 'Swimming pool'],
 ];
 const PERIODS = [
+  ['session', 'This session'],
   ['today', 'Today'],
   ['week', 'Last 7 days'],
   ['month', 'Last 30 days'],
@@ -61,7 +63,13 @@ const DEFAULTS = {
   colors: {}, // project name -> layer colour slot, so colours follow the project
   tare: null, // all-time totals at the moment the cylinder was last emptied
   emptiedAt: null,
+  show: 'water', // or 'co2': fill with the estimated CO₂ instead
+  sounds: false, // synthesised drip sounds
+  ctxHint: 400000, // show a hint when the active session's context passes this (0 = off)
 };
+const CTX_HINTS = [0, 200000, 400000, 600000];
+const ACTIVE_MS = 10 * 60 * 1000; // a session counts as active this long after its last response
+const HINT_MS = 30 * 60 * 1000; // the context hint stays this long after the last response
 const LOGIN_LABEL = process.platform === 'darwin' ? 'Open at login' : 'Start with Windows';
 
 let win = null;
@@ -74,6 +82,7 @@ let progress = { done: 0, total: 0 };
 let quitting = false;
 let pendingEmpty = EMPTY_ON_START;
 let recent = []; // responses from the last hour, for the flow rate
+let sessions = {}; // per-session totals from the scanner
 let vessel = 'cylinder'; // what the widget currently shows (reported by the page)
 const EMPTY_LABELS = {
   tube: 'Empty test tube',
@@ -88,6 +97,7 @@ const EMPTY_LABELS = {
 
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 const stateFile = () => path.join(app.getPath('userData'), 'state.json');
+const statusFile = () => path.join(app.getPath('userData'), 'status.json');
 
 // Where Claude Code and Codex keep their session logs.
 function claudeRoots() {
@@ -139,11 +149,32 @@ function set(patch) {
 
 // ── Totals ──────────────────────────────────────────────────────────────────
 // Everything the widget shows for the current period, method and water mode.
+// "This session": the newest session that's still active, or else the last one
+// that responded. A new session takes over as soon as it starts.
+function currentSession(now = Date.now()) {
+  let active = null;
+  let latest = null;
+  for (const id in sessions) {
+    const s = sessions[id];
+    if (!settings.includeCodex && s.src === 'codex') continue;
+    if (now - s.last < ACTIVE_MS && (!active || s.start > active.start)) active = { id, ...s };
+    if (!latest || s.last > latest.last) latest = { id, ...s };
+  }
+  return active || latest;
+}
+
 function view(period = settings.period) {
-  const c = collect(days, { period, tare: settings.tare && settings.tare.data, codex: settings.includeCodex });
+  const sess = period === 'session' ? currentSession() : null;
+  const c =
+    period === 'session'
+      ? { total: sess ? sess.fams : {}, projects: sess ? { [sess.project]: sess.fams } : {} }
+      : collect(days, { period, tare: settings.tare && settings.tare.data, codex: settings.includeCodex });
   const est = estimate(c.total, settings.method, settings.mode);
   const projects = Object.keys(c.projects)
-    .map((name) => ({ name, liters: estimate(c.projects[name], settings.method, settings.mode).l.mid }))
+    .map((name) => {
+      const e = estimate(c.projects[name], settings.method, settings.mode);
+      return { name, liters: e.l.mid, kg: e.co2.mid };
+    })
     .filter((p) => p.liters > 0)
     .sort((a, b) => b.liters - a.liters);
   const top = projects.slice(0, LAYER_COLORS.length);
@@ -151,11 +182,13 @@ function view(period = settings.period) {
 
   // Colour follows the project: keep its slot unless a larger project already holds it.
   // While the logs are still loading the ranking keeps shifting, so nothing is kept yet.
-  const keep = !scanning;
+  // A single session's project reuses its colour but doesn't claim a new one.
+  const read = !scanning;
+  const keep = read && period !== 'session';
   const used = new Set();
   let assigned = false;
   for (const p of top) {
-    const slot = keep ? settings.colors[p.name] : null;
+    const slot = read ? settings.colors[p.name] : null;
     if (slot != null && slot < LAYER_COLORS.length && !used.has(slot)) {
       p.slot = slot;
       used.add(slot);
@@ -173,9 +206,15 @@ function view(period = settings.period) {
     }
   }
   if (assigned) saveSettings();
-  const layers = top.map((p) => ({ name: p.name, liters: p.liters, color: LAYER_COLORS[p.slot] }));
+  const layers = top.map((p) => ({ name: p.name, liters: p.liters, kg: p.kg, color: LAYER_COLORS[p.slot] }));
   if (rest.length) {
-    layers.push({ name: `Other (${rest.length})`, liters: rest.reduce((s, p) => s + p.liters, 0), color: OTHER_COLOR, other: true });
+    layers.push({
+      name: `Other (${rest.length})`,
+      liters: rest.reduce((s, p) => s + p.liters, 0),
+      kg: rest.reduce((s, p) => s + p.kg, 0),
+      color: OTHER_COLOR,
+      other: true,
+    });
   }
 
   // Flow rate: the last 10 minutes, scaled to an hour.
@@ -183,10 +222,26 @@ function view(period = settings.period) {
   const fresh = {};
   for (const r of recent) {
     if (r.t < cutoff || (!settings.includeCodex && r.src === 'codex')) continue;
+    if (period === 'session' && (!sess || r.sid !== sess.id)) continue;
     addTok(fresh[r.fam] || (fresh[r.fam] = zero()), { ...r.tok, req: 1 });
   }
-  const rate = estimate(fresh, settings.method, settings.mode).l.mid * (3600000 / RATE_WINDOW_MS);
-  return { est, layers, rate };
+  const per = estimate(fresh, settings.method, settings.mode);
+  const k = 3600000 / RATE_WINDOW_MS;
+  return { est, layers, rate: per.l.mid * k, rateKg: per.co2.mid * k, sess };
+}
+
+// The active session's context: every response re-reads all of it, so a long
+// session costs more per reply. Shown once it passes the chosen size.
+function contextHint() {
+  if (!settings.ctxHint) return null;
+  const s = currentSession();
+  if (!s || !s.ctx || s.ctx < settings.ctxHint || Date.now() - (s.ctxAt || 0) > HINT_MS) return null;
+  // Main model of the session: the family with the most responses.
+  let fam = 'opus';
+  let most = -1;
+  for (const f in s.fams) if (s.fams[f].req > most) [fam, most] = [f, s.fams[f].req];
+  const e = estimate({ [fam]: { in: 0, out: 0, cw: 0, cr: s.ctx, req: 1 } }, settings.method, settings.mode);
+  return { tokens: s.ctx, project: s.project, src: s.src, liters: e.l.mid, kg: e.co2.mid };
 }
 
 // Empties the cylinder: the view restarts from zero, the real totals keep counting.
@@ -205,7 +260,11 @@ function sinceText(ts) {
   return dayKey(d) === dayKey(new Date()) ? time : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
 }
 
-function periodLabels() {
+function periodLabels(sess) {
+  if (settings.period === 'session') {
+    if (!sess) return { label: 'This session', text: 'no session yet' };
+    return { label: `This session · ${sess.project}`, text: `${sess.project} session`, since: sinceText(sess.start) };
+  }
   if (settings.period === 'since' && settings.emptiedAt) {
     const when = sinceText(settings.emptiedAt);
     return { label: `Since ${when}`, text: `since ${when}` };
@@ -220,13 +279,63 @@ function fmtLiters(l) {
   return `${Math.round(l).toLocaleString('en-US')} L`;
 }
 
+function fmtCo2(kg) {
+  if (kg < 1) return `${Math.round(kg * 1000)} g CO₂e`;
+  if (kg < 10) return `${kg.toFixed(1)} kg CO₂e`;
+  if (kg < 1000) return `${Math.round(kg)} kg CO₂e`;
+  return `${(kg / 1000).toFixed(kg < 10000 ? 2 : 1)} t CO₂e`;
+}
+
+// A small summary for `thirstyclaude --statusline` (local file, read by that command).
+let statusAt = 0;
+let statusTimer = null;
+function writeStatus() {
+  if (DEMO || SNAPSHOT || scanning) return;
+  const wait = 5000 - (Date.now() - statusAt);
+  if (wait > 0) {
+    if (!statusTimer) statusTimer = setTimeout(() => ((statusTimer = null), writeStatus()), wait);
+    return;
+  }
+  statusAt = Date.now();
+  const today = view('today').est;
+  const recentSessions = {};
+  for (const id in sessions) {
+    const s = sessions[id];
+    if (Date.now() - s.last > 6 * 3600000) continue;
+    const e = estimate(s.fams, settings.method, settings.mode);
+    recentSessions[id] = { l: e.l.mid, kg: e.co2.mid, ctx: s.ctx || 0 };
+  }
+  const status = {
+    v: 1,
+    at: statusAt,
+    day: dayKey(new Date()),
+    show: settings.show,
+    ctxHint: settings.ctxHint,
+    today: { l: today.l.mid, kg: today.co2.mid },
+    sessions: recentSessions,
+  };
+  try {
+    const tmp = statusFile() + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(status));
+    fs.renameSync(tmp, statusFile());
+  } catch {}
+}
+
 function push(events = []) {
-  const { est, layers, rate } = view();
-  const { label, text } = periodLabels();
-  if (tray) tray.setToolTip(`ThirstyClaude: ${fmtLiters(est.l.mid)} (${text})`);
+  const { est, layers, rate, rateKg, sess } = view();
+  const { label, text, since } = periodLabels(sess);
+  const amount = settings.show === 'co2' ? fmtCo2(est.co2.mid) : fmtLiters(est.l.mid);
+  if (tray) tray.setToolTip(`ThirstyClaude: ${amount} (${text})`);
+  writeStatus();
   if (win && !win.isDestroyed()) {
     win.webContents.send('update', {
       liters: est.l,
+      co2: est.co2,
+      show: settings.show,
+      sounds: settings.sounds,
+      hint: contextHint(),
+      rateKg,
+      since: since || null,
       kwh: { lo: est.wh.lo / 1000, mid: est.wh.mid / 1000, hi: est.wh.hi / 1000 },
       tokens: est.tokens,
       layers,
@@ -240,7 +349,7 @@ function push(events = []) {
       vessel: settings.vessel,
       scanning,
       progress,
-      events: events.filter((e) => settings.includeCodex || e.src !== 'codex'),
+      events: events.filter((e) => (settings.includeCodex || e.src !== 'codex') && (settings.period !== 'session' || (sess && e.sid === sess.id))),
     });
   }
 }
@@ -339,6 +448,7 @@ function createWindow() {
       sandbox: true,
       spellcheck: false,
       zoomFactor: z,
+      autoplayPolicy: 'no-user-gesture-required', // drip sounds (off unless chosen)
     },
   });
   if (settings.alwaysOnTop) win.setAlwaysOnTop(true, 'floating');
@@ -430,6 +540,13 @@ function buildMenu() {
       })),
     },
     {
+      label: 'Fill with',
+      submenu: [
+        { label: 'Water', type: 'radio', checked: settings.show !== 'co2', click: () => set({ show: 'water' }) },
+        { label: 'CO₂ (carbon emissions)', type: 'radio', checked: settings.show === 'co2', click: () => set({ show: 'co2' }) },
+      ],
+    },
+    {
       label: 'Estimate',
       submenu: [
         { label: 'ThirstyClaude (all token types)', type: 'radio', checked: settings.method === 'tc', click: () => set({ method: 'tc' }) },
@@ -438,12 +555,23 @@ function buildMenu() {
     },
     {
       label: 'Water counted',
+      enabled: settings.show !== 'co2',
       submenu: [
         { label: 'Including power plants', type: 'radio', checked: settings.mode === 'allIn', click: () => set({ mode: 'allIn' }) },
         { label: 'Data-center cooling only', type: 'radio', checked: settings.mode === 'cooling', click: () => set({ mode: 'cooling' }) },
       ],
     },
     { label: 'Include Codex', type: 'checkbox', checked: settings.includeCodex, click: (item) => set({ includeCodex: item.checked }) },
+    {
+      label: 'Context hint',
+      submenu: CTX_HINTS.map((n) => ({
+        label: n ? `Over ${n / 1000}K tokens` : 'Off',
+        type: 'radio',
+        checked: settings.ctxHint === n,
+        click: () => set({ ctxHint: n }),
+      })),
+    },
+    { label: 'Drip sounds', type: 'checkbox', checked: settings.sounds, click: (item) => set({ sounds: item.checked }) },
     {
       label: 'Vessel',
       submenu: VESSELS.map(([id, label], i) => [
@@ -505,6 +633,7 @@ function startWorker() {
   worker.on('message', (m) => {
     if (m.type === 'days') {
       days = m.days;
+      sessions = m.sessions || sessions;
       recent = m.recent || recent;
       if (m.progress) progress = m.progress;
       const finished = scanning && !m.scanning;
@@ -519,18 +648,31 @@ function startWorker() {
   worker.on('error', (e) => console.error('scanner error:', e));
 }
 
+// The demo's "current session": web-app on Opus, about 40 minutes old, with a big context.
+function demoSession(t, tok) {
+  const s = sessions.demo || (sessions.demo = { src: 'claude', project: 'web-app', start: Date.now() - 40 * 60000, last: 0, fams: {}, ctx: 452000, ctxAt: 0 });
+  addTok(s.fams.opus || (s.fams.opus = zero()), tok);
+  s.last = Math.max(s.last, t.getTime());
+  s.ctxAt = s.last;
+  s.ctx += Math.round(Math.random() * 3000);
+}
+
 function demoResponse(t) {
   const [project] = pick(DEMO_PROJECTS);
   const [src, model] = pick(DEMO_MIX);
   const tok = demoTokens(2 + Math.random() * 5);
   tok.req = 1;
   demoAdd(t, src, project, model, tok);
-  recent.push({ t: t.getTime(), src, project, fam: familyOf(model), tok });
-  return { src, fam: familyOf(model), sub: Math.random() < 0.3 };
+  const inSession = project === 'web-app' && src === 'claude';
+  if (inSession) demoSession(t, tok);
+  recent.push({ t: t.getTime(), src, project, fam: familyOf(model), tok, sid: inSession ? 'demo' : null });
+  return { src, fam: familyOf(model), sub: Math.random() < 0.3, sid: inSession ? 'demo' : null };
 }
 
 function startDemo() {
   demoDays();
+  sessions = {};
+  for (let i = 0; i < 60; i++) demoSession(new Date(Date.now() - (60 - i) * 40000), { ...demoTokens(4), req: 1 });
   for (let i = 0; i < 40; i++) demoResponse(new Date(Date.now() - Math.random() * RATE_WINDOW_MS));
   scanning = false;
   progress = { done: 1, total: 1 };
@@ -561,6 +703,7 @@ async function snapshot() {
     days: Object.keys(days).length,
     vessel,
     caption: await win.webContents.executeJavaScript("document.getElementById('caption').textContent"),
+    shown: await win.webContents.executeJavaScript("[document.getElementById('liters').textContent, document.getElementById('period').textContent, document.getElementById('hint').textContent]"),
     menu: buildMenu().items.map((i) => i.label).filter(Boolean),
   };
   fs.writeFileSync(SNAPSHOT.replace(/\.png$/i, '') + '.json', JSON.stringify(summary, null, 2));
@@ -594,6 +737,10 @@ if (!SNAPSHOT && !DEMO && !app.requestSingleInstanceLock()) {
 
     settings = DEMO ? { ...DEFAULTS, colors: {} } : loadSettings();
     if (PERIOD_ARG && PERIODS.some(([id]) => id === PERIOD_ARG && id !== 'since')) settings.period = PERIOD_ARG;
+    if (SHOW_ARG === 'water' || SHOW_ARG === 'co2') settings.show = SHOW_ARG;
+    if (arg('sounds')) settings.sounds = true;
+    if (settings.show !== 'co2') settings.show = 'water';
+    if (!CTX_HINTS.includes(settings.ctxHint)) settings.ctxHint = DEFAULTS.ctxHint;
     if (SIZE_ARG && SIZES[SIZE_ARG]) settings.size = SIZE_ARG;
     if (VESSEL_ARG && VESSELS.some(([id]) => id === VESSEL_ARG)) settings.vessel = VESSEL_ARG;
     if (!SIZES[settings.size]) settings.size = 'medium';

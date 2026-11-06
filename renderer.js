@@ -14,6 +14,18 @@ const DROPS = [
 ];
 const dropColor = (fam) => (fam.startsWith('gpt') ? '#c98500' : (DROPS.find((d) => d[0] === fam) || DROPS[0])[2]);
 
+const mixHex = (a, b, t) =>
+  '#' + [1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - t) + parseInt(b.slice(i, i + 2), 16) * t).toString(16).padStart(2, '0')).join('');
+// CO₂ mode: a light grey haze over the project colours. More than ~15% makes
+// neighbouring layers hard to tell apart (checked with a palette validator).
+const smoke = (hex) => mixHex(hex, '#9aa1ab', 0.15);
+// In CO₂ mode the vessel holds the gas itself: 1 kg of CO₂ is about 547 L at 20 °C.
+const CO2_L_PER_KG = 547;
+const KM_PER_KG = 1 / 0.244; // average gasoline car (EPA)
+const TREE_KG_YEAR = 60; // one urban tree, one year (EPA)
+const LADDER = ['tube', 'glass', 'cylinder', 'bucket', 'barrel', 'tub', 'hottub', 'pool'];
+const VESSEL_NAMES = { tube: 'Test tube', glass: 'Glass', cylinder: 'Cylinder', bucket: 'Bucket', barrel: 'Rain barrel', tub: 'Bathtub', hottub: 'Hot tub', pool: 'Swimming pool' };
+
 // ── Vessels: the container grows with the amount ─────────────────────────────
 // clip: inside of the vessel; bottom/top: y of zero and of full capacity;
 // drip: where drops start; tilt: tips over when emptied.
@@ -156,6 +168,13 @@ function vesselFor(liters) {
 }
 
 const cur = { vessel: null, cap: null, unit: null };
+const card = $('card');
+
+function el(tag, attrs) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
 
 function instant(els) {
   for (const e of els) e.classList.add('instant');
@@ -180,8 +199,29 @@ function wavePath(amp, len, phase = 0, dy = 0) {
   for (let x = -10; x <= 160; x += 2) d += ` L${x} ${(dy + amp * Math.sin((x / len) * 2 * Math.PI + phase)).toFixed(2)}`;
   return d + ' L160 6 L-10 6 Z';
 }
-$('waveFront').setAttribute('d', wavePath(1.4, 24));
-$('waveBack').setAttribute('d', wavePath(1.8, 24, Math.PI, -0.6));
+// Smoke surface: rounded billows, two per 24px so the drift still loops.
+function billowPath(r, dy = 0, shift = 0) {
+  let x = -10 - shift;
+  let d = `M${x} ${dy}`;
+  for (; x < 160; x += 2 * r) d += ` a${r} ${(r * 0.8).toFixed(2)} 0 0 1 ${2 * r} 0`;
+  return d + ` L${x} 6 L${-10 - shift} 6 Z`;
+}
+
+let look = null; // true while showing CO₂
+function setLook(co2) {
+  if (look === co2) return;
+  look = co2;
+  $('waveFront').setAttribute('d', co2 ? billowPath(6, 1.6) : wavePath(1.4, 24));
+  $('waveBack').setAttribute('d', co2 ? billowPath(6, -0.8, 6) : wavePath(1.8, 24, Math.PI, -0.6));
+  card.classList.toggle('co2', co2);
+}
+
+// Soft puffs drifting through the smoke (shown only in CO₂ mode).
+for (let i = 0; i < 16; i++) {
+  const c = el('circle', { cx: ((i * 37) % 150) - 5, cy: 7 + ((i * 53) % 200), r: 7 + (i % 4) * 2.4, fill: 'url(#puffGrad)' });
+  c.style.animationDelay = `${-i * 1.3}s`;
+  $('puffs').appendChild(c);
+}
 
 function capacityFor(v) {
   if (v <= 0) return 10;
@@ -189,12 +229,6 @@ function capacityFor(v) {
   const p = Math.pow(10, Math.floor(Math.log10(target)));
   for (const m of [1, 2, 5, 10]) if (m * p >= target) return m * p;
   return 10 * p;
-}
-
-function el(tag, attrs) {
-  const e = document.createElementNS(NS, tag);
-  for (const k in attrs) e.setAttribute(k, attrs[k]);
-  return e;
 }
 
 function drawTicks(v, cap, unit) {
@@ -236,6 +270,28 @@ function fmtRate(lph) {
   return lph < 1 ? `${Math.round(lph * 1000)} mL/h` : `${lph.toFixed(1)} L/h`;
 }
 
+function co2Parts(kg) {
+  if (kg < 1) return [String(Math.round(kg * 1000)), 'g CO₂e'];
+  if (kg < 10) return [kg.toFixed(1), 'kg CO₂e'];
+  if (kg < 1000) return [String(Math.round(kg)), 'kg CO₂e'];
+  return [(kg / 1000).toFixed(kg < 10000 ? 2 : 1), 't CO₂e'];
+}
+const fmtCo2 = (kg) => co2Parts(kg).join(' ');
+function literParts(l) {
+  if (l < 1) return [String(Math.round(l * 1000)), 'mL'];
+  if (l < 10) return [l.toFixed(1), 'L'];
+  return [Math.round(l).toLocaleString('en-US'), 'L'];
+}
+// "42–305 g CO₂e" rather than "42 g CO₂e – 305 g CO₂e" when the units match.
+function fmtRange(parts, lo, hi) {
+  const [a, ua] = parts(lo);
+  const [b, ub] = parts(hi);
+  return ua === ub ? `${a}–${b} ${ub}` : `${a} ${ua} – ${b} ${ub}`;
+}
+const PHONE_KWH = 0.019; // one smartphone charge (EPA)
+const fmtRateKg = (kgph) => (kgph < 1 ? `${Math.round(kgph * 1000)} g/h` : `${kgph.toFixed(1)} kg/h`);
+const fmtNum = (x) => (x < 10 ? x.toFixed(1) : Math.round(x).toLocaleString('en-US'));
+
 // The caption counts in whichever vessel is showing: [litres each, singular, plural].
 const VESSEL_UNITS = {
   tube: [0.02, 'test tube', 'test tubes'],
@@ -270,13 +326,13 @@ function applyLevel(y, layers) {
   waterEl.style.transform = `translateY(${y.toFixed(2)}px)`;
   const v = VESSELS[cur.vessel];
   const H = Math.max(0, v.bottom - y);
-  const total = layers.reduce((s, l) => s + l.liters, 0);
+  const total = layers.reduce((s, l) => s + l.v, 0);
   const g = $('bands');
   while (g.childElementCount < layers.length) g.appendChild(el('rect', { x: -10, width: 160 }));
   while (g.childElementCount > layers.length) g.lastChild.remove();
   let top = 0;
   layers.forEach((l, i) => {
-    const h = total > 0 ? (H * l.liters) / total : 0;
+    const h = total > 0 ? (H * l.v) / total : 0;
     const last = i === layers.length - 1;
     const gap = !last && h > 2.5 ? 0.9 : 0; // thin gap between layers
     const r = g.children[i];
@@ -285,9 +341,10 @@ function applyLevel(y, layers) {
     r.style.fill = l.color;
     top += h;
   });
-  const surface = layers.length ? layers[0].color : '#3987e5';
+  // Smoke has a grey, cloudy top; water takes the top layer's colour.
+  const surface = look ? '#b4bac3' : layers.length ? layers[0].color : '#3987e5';
   $('waveFront').style.fill = surface;
-  $('waveBack').style.fill = surface;
+  $('waveBack').style.fill = look ? '#858c96' : surface;
   renderHits(layers, y, H, total, v);
 }
 
@@ -297,7 +354,7 @@ let hitLayers = [];
 
 function renderHits(layers, y, H, total, v) {
   const box = $('hits');
-  hitLayers = layers.map((l) => ({ ...l, share: total > 0 ? l.liters / total : 0 }));
+  hitLayers = layers.map((l) => ({ ...l, share: total > 0 ? l.v / total : 0 }));
   while (box.childElementCount < layers.length) {
     const d = document.createElement('div');
     d.className = 'hit';
@@ -329,7 +386,7 @@ function showTip(l, e) {
   if (!l) return;
   const tip = $('tip');
   const pct = l.share >= 0.995 ? '100%' : l.share < 0.01 ? '<1%' : `${Math.round(l.share * 100)}%`;
-  tip.innerHTML = `<i style="background:${l.color}"></i><b>${esc(l.name)}</b>${fmtLiters(l.liters)} · ${pct}`;
+  tip.innerHTML = `<i style="background:${l.color}"></i><b>${esc(l.name)}</b>${l.text} · ${pct}`;
   const r = card.getBoundingClientRect();
   const w = tip.offsetWidth;
   let x = e.clientX - r.left + 12;
@@ -406,6 +463,7 @@ function nextDrip() {
 function drip(e, y) {
   const [x, y0] = VESSELS[cur.vessel].drip;
   const s = e.sub ? 0.65 : 1;
+  if (look) return puff(e, x, y0, y, s);
   const drop = el('path', { d: 'M0 -8 C2.6 -4 3.9 -1.3 0 2 C-3.9 -1.3 -2.6 -4 0 -8Z', fill: dropColor(e.fam) });
   drop.style.opacity = '0';
   $('drops').appendChild(drop);
@@ -421,7 +479,209 @@ function drip(e, y) {
   ).onfinish = () => {
     drop.remove();
     splash(x, y, dropColor(e.fam), s);
+    sound(e.sub);
   };
+}
+
+// CO₂ mode: a grey puff, tinted by model, sinks in (CO₂ is heavier than air).
+function puff(e, x, y0, y, s) {
+  const color = mixHex(dropColor(e.fam), '#c3c8cf', 0.5);
+  const p = el('circle', { r: 3.4, fill: color });
+  p.style.opacity = '0';
+  $('drops').appendChild(p);
+  const total = (FORM_MS + fallMs(y - y0)) * 1.3;
+  p.animate(
+    [
+      { transform: `translate(${x}px, ${y0 + 1}px) scale(${0.3 * s})`, opacity: 0, easing: 'ease-out' },
+      { transform: `translate(${x}px, ${y0 + 3}px) scale(${s})`, opacity: 0.85, offset: 0.25, easing: 'cubic-bezier(.45,0,.9,.6)' },
+      { transform: `translate(${x + 2}px, ${y - 2}px) scale(${1.25 * s})`, opacity: 0.8 },
+    ],
+    { duration: total, fill: 'both' }
+  ).onfinish = () => {
+    p.remove();
+    for (const [dx, d] of [[-1, 0], [1, 90]]) {
+      const ring = el('circle', { cx: x + dx * 2, cy: y, r: 2.4 * s, fill: color });
+      $('drops').appendChild(ring);
+      ring.animate(
+        [
+          { transform: 'translate(0, 0) scale(1)', opacity: 0.7 },
+          { transform: `translate(${dx * 6 * s}px, ${-3 * s}px) scale(2.6)`, opacity: 0 },
+        ],
+        { duration: 900, delay: d, easing: 'ease-out', fill: 'both' }
+      ).onfinish = () => ring.remove();
+    }
+    sound(e.sub);
+  };
+}
+
+// ── Sounds (optional): synthesised here, so there are no audio files ────────
+// A water drop is a short sine "plink" whose pitch rises; CO₂ is a soft puff of
+// filtered noise. Bigger vessels sound lower.
+const PITCH = { tube: 1700, glass: 1500, cylinder: 1350, bucket: 1050, barrel: 900, tub: 780, hottub: 660, pool: 560 };
+let actx = null;
+
+function audioCtx() {
+  if (!actx) {
+    try {
+      actx = new AudioContext();
+    } catch {
+      return null;
+    }
+  }
+  if (actx.state === 'suspended') actx.resume().catch(() => {});
+  return actx;
+}
+
+// Builds one drop sound into any audio context (also used by the tests).
+function dropSound(a, t, freq, vol, co2) {
+  const g = a.createGain();
+  g.connect(a.destination);
+  if (co2) {
+    const len = Math.floor(a.sampleRate * 0.22);
+    const buf = a.createBuffer(1, len, a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const src = a.createBufferSource();
+    src.buffer = buf;
+    const lp = a.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(freq * 0.7, t);
+    lp.frequency.exponentialRampToValueAtTime(freq * 0.25, t + 0.2);
+    src.connect(lp);
+    lp.connect(g);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol * 2.4, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.21);
+    src.start(t);
+    src.stop(t + 0.22);
+    return;
+  }
+  const o = a.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(freq, t);
+  o.frequency.exponentialRampToValueAtTime(freq * 1.9, t + 0.05);
+  o.connect(g);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+  o.start(t);
+  o.stop(t + 0.15);
+}
+
+function sound(sub) {
+  if (!lastState || !lastState.sounds) return;
+  const a = audioCtx();
+  if (!a) return;
+  const f = (PITCH[cur.vessel] || 1200) * (sub ? 1.3 : 1) * (0.94 + Math.random() * 0.12);
+  dropSound(a, a.currentTime + 0.01, f, sub ? 0.05 : 0.09, look);
+}
+
+// Level-up: two rising notes.
+function chime() {
+  if (!lastState || !lastState.sounds) return;
+  const a = audioCtx();
+  if (!a) return;
+  [[660, 0], [990, 0.13]].forEach(([f, dt]) => {
+    const t = a.currentTime + 0.02 + dt;
+    const o = a.createOscillator();
+    const g = a.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(f, t);
+    o.connect(g);
+    g.connect(a.destination);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.06, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+    o.start(t);
+    o.stop(t + 0.4);
+  });
+}
+
+// ── Level-up: the old vessel shrinks, tips and pours into the bigger one ────
+let levelingUntil = 0;
+
+function levelUp(from, to, targetY, color) {
+  const svg = $('rig').ownerSVGElement;
+  const ghost = $('rig').cloneNode(true);
+  ghost.querySelector('#drops').textContent = '';
+  ghost.querySelector('#range').remove();
+  const gWater = ghost.querySelector('#water');
+  // Its own clip, since the shared one changes to the new vessel.
+  const old = document.getElementById('ghostClip');
+  if (old) old.remove();
+  const clip = el('clipPath', { id: 'ghostClip' });
+  clip.appendChild(el('path', { d: VESSELS[from].clip }));
+  svg.querySelector('defs').appendChild(clip);
+  ghost.querySelectorAll('[clip-path]').forEach((n) => n.setAttribute('clip-path', 'url(#ghostClip)'));
+  ghost.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'));
+  ghost.removeAttribute('id');
+  ghost.style.transformBox = 'view-box';
+  ghost.style.transformOrigin = '0 0';
+  svg.appendChild(ghost);
+
+  const D = 2600;
+  const P = [79, 120]; // pivot in the old vessel
+  const Q = [48, 50]; // where it ends up, small, above the new one
+  const SC = 0.42;
+  const ROT = 108;
+  const tf = (q, r, sc) => `translate(${q[0]}px, ${q[1]}px) rotate(${r}deg) scale(${sc}) translate(${-P[0]}px, ${-P[1]}px)`;
+  ghost.animate(
+    [
+      { transform: tf(P, 0, 1), opacity: 1, easing: 'cubic-bezier(.4,0,.2,1)' },
+      { transform: tf(Q, 0, SC), opacity: 1, offset: 0.26, easing: 'ease-in-out' },
+      { transform: tf(Q, ROT, SC), opacity: 1, offset: 0.42 },
+      { transform: tf(Q, ROT, SC), opacity: 1, offset: 0.8 },
+      { transform: tf(Q, ROT, SC), opacity: 0 },
+    ],
+    { duration: D, fill: 'forwards' }
+  ).onfinish = () => {
+    ghost.remove();
+    clip.remove();
+  };
+  // Its water drains while it pours.
+  const vOld = VESSELS[from];
+  const yNow = gWater.style.transform || `translateY(${vOld.bottom}px)`;
+  gWater.animate(
+    [{ transform: yNow }, { transform: yNow, offset: 0.44 }, { transform: `translateY(${vOld.bottom + 4}px)`, offset: 0.78 }, { transform: `translateY(${vOld.bottom + 4}px)` }],
+    { duration: D, fill: 'forwards' }
+  );
+  // The new vessel fades in underneath.
+  $('rig').animate([{ opacity: 0 }, { opacity: 0, offset: 0.12 }, { opacity: 1, offset: 0.36 }], { duration: D });
+
+  // The stream from the old vessel's mouth to the new surface.
+  const m = new DOMMatrix().translate(Q[0], Q[1]).rotate(ROT).scale(SC).translate(-P[0], -P[1]);
+  const mouth = m.transformPoint(new DOMPoint(79, vOld.top - 14));
+  const endY = Math.max(mouth.y + 20, targetY);
+  const stream = el('path', {
+    d: `M${mouth.x.toFixed(1)} ${mouth.y.toFixed(1)} Q${(mouth.x + 9).toFixed(1)} ${(mouth.y + 6).toFixed(1)} ${(mouth.x + 10).toFixed(1)} ${endY.toFixed(1)}`,
+    fill: 'none',
+    stroke: color,
+    'stroke-width': 2.4,
+    'stroke-linecap': 'round',
+  });
+  svg.appendChild(stream);
+  const len = stream.getTotalLength();
+  stream.style.strokeDasharray = `${len} ${len}`;
+  stream.animate(
+    [
+      { strokeDashoffset: len, opacity: 0.9 },
+      { strokeDashoffset: len, opacity: 0.9, offset: 0.42 },
+      { strokeDashoffset: 0, opacity: 0.9, offset: 0.5 },
+      { strokeDashoffset: 0, opacity: 0.9, offset: 0.74 },
+      { strokeDashoffset: -len, opacity: 0.9, offset: 0.84 },
+      { strokeDashoffset: -len, opacity: 0 },
+    ],
+    { duration: D, fill: 'forwards' }
+  ).onfinish = () => stream.remove();
+
+  // A small banner: "Bucket → Rain barrel".
+  const b = $('levelup');
+  b.textContent = `${VESSEL_NAMES[from]} → ${VESSEL_NAMES[to]}`;
+  b.classList.add('on');
+  setTimeout(() => b.classList.remove('on'), D + 600);
+  setTimeout(chime, D * 0.45);
+  levelingUntil = Date.now() + D;
+  return D * 0.48; // when the new water starts to rise
 }
 
 function splash(x, y, color, s) {
@@ -463,7 +723,7 @@ function pour() {
     { duration: 1600, easing: 'ease-in-out' }
   );
   for (let i = 0; i < 6; i++) {
-    const drop = el('path', { d: 'M0 -4 C1.4 -2 2 -0.7 0 1 C-2 -0.7 -1.4 -2 0 -4Z', fill: '#8fd6ff' });
+    const drop = el('path', { d: 'M0 -4 C1.4 -2 2 -0.7 0 1 C-2 -0.7 -1.4 -2 0 -4Z', fill: look ? '#b8bec7' : '#8fd6ff' });
     drop.style.opacity = '0';
     $('spill').appendChild(drop);
     const x0 = 13 + Math.random() * 4;
@@ -480,24 +740,44 @@ function pour() {
 }
 
 // ── Hover legend ────────────────────────────────────────────────────────────
-function legend(s) {
-  const L = s.liters;
+function legend(s, co2) {
+  const amt = co2 ? s.co2 : s.liters;
+  const fmt = co2 ? fmtCo2 : fmtLiters;
   const items = s.layers
-    .map((l) => `<div class="lg-item"><i style="background:${l.color}"></i><span class="nm">${esc(l.name)}</span><span>${fmtLiters(l.liters)}</span></div>`)
+    .map(
+      (l) =>
+        `<div class="lg-item"><i style="background:${co2 ? smoke(l.color) : l.color}"></i><span class="nm">${esc(l.name)}</span><span>${co2 ? fmtCo2(l.kg) : fmtLiters(l.liters)}</span></div>`
+    )
     .join('');
   const drops = DROPS.map(([, label, c]) => `<span><b style="color:${c}">●</b>${label}</span>`).join('');
   const method = s.method === 'eco' ? 'EcoLogits estimate' : 'ThirstyClaude estimate';
-  const water = s.mode === 'cooling' ? 'cooling only' : 'incl. power plants';
+  const basis = co2 ? 'US grid average' : s.mode === 'cooling' ? 'cooling only' : 'incl. power plants';
+  const rate = co2 ? s.rateKg : s.rate;
+  const t = s.tokens;
+  const head = s.since ? `${s.periodLabel} · ${s.since}` : s.periodLabel;
+  const hint = s.hint
+    ? `<div class="lg-hint">⚠ ${fmtTokens(s.hint.tokens)} context: ≈ ${co2 ? fmtCo2(s.hint.kg) : fmtLiters(s.hint.liters)} a reply</div>`
+    : '';
+  const equiv =
+    co2 && amt.mid > 0
+      ? `<div>Like driving ${fmtNum(amt.mid * KM_PER_KG)} km, or ${
+          amt.mid / TREE_KG_YEAR >= 0.1
+            ? `${fmtNum(amt.mid / TREE_KG_YEAR)} trees absorbing for a year`
+            : `${Math.round(s.kwh.mid / PHONE_KWH).toLocaleString('en-US')} phone charges of electricity`
+        }</div>`
+      : '';
   $('legend').innerHTML = `
-    <div class="lg-head">${esc(s.periodLabel)}</div>
-    <div class="lg-big">${fmtLiters(L.mid)}</div>
-    <div>Likely ${fmtLiters(L.lo)} – ${fmtLiters(L.hi)}</div>
-    <div>≈ ${s.kwh.mid < 10 ? s.kwh.mid.toFixed(2) : Math.round(s.kwh.mid).toLocaleString('en-US')} kWh · ${s.tokens.req.toLocaleString('en-US')} responses</div>
-    <div>${fmtTokens(s.tokens.in + s.tokens.out + s.tokens.cw + s.tokens.cr)} tokens · ${fmtTokens(s.tokens.out)} output</div>
-    ${s.rate > 0 ? `<div>Now ${fmtRate(s.rate)}</div>` : ''}
+    <div class="lg-head">${esc(head)}</div>
+    <div class="lg-big">${fmt(amt.mid)}</div>
+    <div>Likely ${fmtRange(co2 ? co2Parts : literParts, amt.lo, amt.hi)}</div>
+    ${equiv}
+    <div>≈ ${s.kwh.mid < 10 ? s.kwh.mid.toFixed(2) : Math.round(s.kwh.mid).toLocaleString('en-US')} kWh · ${t.req.toLocaleString('en-US')} responses</div>
+    <div>${fmtTokens(t.in + t.out + t.cw + t.cr)} tokens · ${fmtTokens(t.out)} output</div>
+    ${rate > 0 ? `<div>Now ${co2 ? fmtRateKg(rate) : fmtRate(rate)}</div>` : ''}
+    ${hint}
     <div class="lg-sec">Projects</div>${items || '<div>None yet</div>'}
-    <div class="lg-sec">Drops</div><div class="lg-drops">${drops}</div>
-    <div class="lg-foot">Small drops are subagents. Band = likely range.<br>${method}, ${water}.</div>`;
+    <div class="lg-sec">${co2 ? 'Puffs' : 'Drops'}</div><div class="lg-drops">${drops}</div>
+    <div class="lg-foot">${co2 ? 'Small puffs are subagents. CO₂ is heavier than air, so it settles.' : 'Small drops are subagents. Band = likely range.'}<br>${method}, ${basis}.</div>`;
 }
 
 // ── Slosh: the water tilts and settles when the widget is dragged ───────────
@@ -593,13 +873,37 @@ function render(s) {
   prevEmptied = s.emptiedAt;
   const pouring = Date.now() < pouringUntil;
 
-  const L = s.liters.mid;
+  const co2 = s.show === 'co2';
+  setLook(co2);
+  // What fills the vessel: litres of water, or litres of CO₂ gas.
+  const A = co2 ? { lo: s.co2.lo * CO2_L_PER_KG, mid: s.co2.mid * CO2_L_PER_KG, hi: s.co2.hi * CO2_L_PER_KG } : s.liters;
+  const layers = s.layers.map((l) => ({
+    ...l,
+    v: co2 ? l.kg * CO2_L_PER_KG : l.liters,
+    color: co2 ? smoke(l.color) : l.color,
+    text: co2 ? fmtCo2(l.kg) : fmtLiters(l.liters),
+  }));
+  const L = A.mid;
+  const key = `${s.period}|${s.mode}|${s.method}|${s.emptiedAt}|${s.show}|${s.since}`;
   let switched = false;
+  let riseDelay = 0;
   if (!pouring || !cur.vessel) {
-    const name = VESSELS[s.vessel] ? s.vessel : vesselFor(L); // a chosen vessel, or grow with the amount
+    const auto = !VESSELS[s.vessel];
+    const name = auto ? vesselFor(L) : s.vessel; // a chosen vessel, or grow with the amount
     if (name !== cur.vessel) {
+      const from = cur.vessel;
+      const grew =
+        auto && from && !s.scanning && !REDUCED_MOTION && key === prevKey && prevLiters !== null && L > prevLiters && LADDER.indexOf(name) > LADDER.indexOf(from);
+      if (grew) {
+        cancelDrips();
+        const nv = VESSELS[name];
+        const cap = capacityFor((L < 1 ? 1000 : 1) * L);
+        const y = nv.bottom - (nv.bottom - nv.top) * Math.min(((L < 1 ? 1000 : 1) * L) / cap, 1);
+        riseDelay = levelUp(from, name, y, co2 ? '#b4bac3' : layers.length ? layers[0].color : '#8fd6ff');
+      }
       setVessel(name);
       switched = true;
+      if (grew) applyLevel(VESSELS[name].bottom, layers); // empty, then fills from the pour
     }
   }
   const v = VESSELS[cur.vessel];
@@ -616,19 +920,23 @@ function render(s) {
   const level = (x) => v.bottom - (v.bottom - v.top) * Math.min(Math.max(x / cur.cap, 0), 1);
   const levelY = pouring ? v.bottom : level(L * k);
 
-  const showRange = !s.scanning && !pouring && L > 0 && s.liters.hi > s.liters.lo;
-  setRange(showRange, level(s.liters.lo * k), s.liters.hi * k > cur.cap ? v.top - 6 : level(s.liters.hi * k));
+  const showRange = !s.scanning && !pouring && L > 0 && A.hi > A.lo && Date.now() >= levelingUntil;
+  setRange(showRange, level(A.lo * k), A.hi * k > cur.cap ? v.top - 6 : level(A.hi * k));
 
-  const key = `${s.period}|${s.mode}|${s.method}|${s.emptiedAt}`;
+  const leveling = Date.now() < levelingUntil;
   const rose = !s.scanning && !pouring && !switched && prevLiters !== null && key === prevKey && L > prevLiters;
-  if (rose && !REDUCED_MOTION) {
+  if (riseDelay > 0) {
+    setLevel(levelY, layers, riseDelay); // rises as the old vessel pours in
+  } else if (rose && leveling) {
+    setLevel(levelY, layers, 0); // joins the pour already under way
+  } else if (rose && !REDUCED_MOTION) {
     const events = s.events && s.events.length ? s.events : Array.from({ length: Math.max(1, Math.min(MAX_QUEUED, s.tokens.req - (prevReq ?? s.tokens.req))) }, () => ({ fam: 'opus', sub: false }));
-    if (!dripTimer && !levelTimer) setLevel(levelY, s.layers, FORM_MS + fallMs(surfaceY - v.drip[1]));
-    else setLevel(levelY, s.layers, 0);
+    if (!dripTimer && !levelTimer) setLevel(levelY, layers, FORM_MS + fallMs(surfaceY - v.drip[1]));
+    else setLevel(levelY, layers, 0);
     queueDrips(events);
   } else {
     if (pouring || switched) cancelDrips();
-    setLevel(levelY, s.layers, 0);
+    setLevel(levelY, layers, 0);
   }
 
   if (L > 0 && !pouring) {
@@ -643,15 +951,22 @@ function render(s) {
     }, 1300);
   }
 
-  $('liters').textContent = s.scanning && L === 0 ? '…' : fmtLiters(L);
+  if (s.scanning && L === 0) $('liters').textContent = '…';
+  else if (co2) {
+    const [n, u] = co2Parts(s.co2.mid);
+    $('liters').innerHTML = `${n}<small> ${u}</small>`;
+  } else $('liters').textContent = fmtLiters(L);
   if (s.scanning) {
     $('caption').textContent = `reading logs ${s.progress.done}/${s.progress.total}`;
     $('period').textContent = '';
   } else {
-    $('caption').textContent = caption(L, cur.vessel);
-    $('period').innerHTML = esc(s.periodText) + (s.rate > 0 ? ` · <span class="rate">▲ ${fmtRate(s.rate)}</span>` : '');
+    const base = caption(L, cur.vessel);
+    $('caption').textContent = co2 && L > 0 && base.length <= 17 ? `${base} of CO₂` : base;
+    const rate = co2 ? s.rateKg : s.rate;
+    $('period').innerHTML = `<span class="pt">${esc(s.periodText)}</span>` + (rate > 0 ? `<span class="rate">&nbsp;· ▲ ${co2 ? fmtRateKg(rate) : fmtRate(rate)}</span>` : '');
   }
-  legend(s);
+  $('hint').textContent = s.hint && !s.scanning ? `⚠ ${fmtTokens(s.hint.tokens)} context · /compact?` : '';
+  legend(s, co2);
 
   prevLiters = L;
   prevReq = s.tokens.req;
@@ -660,7 +975,6 @@ function render(s) {
 
 window.thirsty.onUpdate(render);
 window.thirsty.onMove(onMove);
-const card = $('card');
 $('info').addEventListener('mouseenter', () => card.classList.add('show-legend'));
 $('info').addEventListener('mouseleave', () => card.classList.remove('show-legend'));
 $('info').addEventListener('contextmenu', (e) => {

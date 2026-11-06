@@ -5,7 +5,8 @@
 const { parentPort, workerData } = require('worker_threads');
 const fs = require('fs');
 const path = require('path');
-const { familyOf, dayKey } = require('./model');
+const { familyOf, dayKey, zero, addTok } = require('./model');
+const { readLines, claudeUsage } = require('./logread');
 
 let fzstd = null; // decompresses finished Codex sessions (.jsonl.zst)
 try {
@@ -14,28 +15,38 @@ try {
 
 const { claudeRoots, codexRoots, stateFile } = workerData;
 const VERSION = 2;
-const CHUNK = 8 * 1024 * 1024;
 const KEEP_KEYS_DAYS = 120; // remember response ids this long (guards against resumed-session copies)
 const POLL_MS = 5000;
 const RELIST_EVERY = 6; // polls between directory re-listings
 const RECENT_MS = 60 * 60 * 1000; // responses kept for the flow rate
 const EVENT_MS = 2 * 60 * 1000; // responses this fresh become drops
+const KEEP_SESSIONS_MS = 30 * 864e5; // per-session totals kept this long
+const BACKFILL_MS = 3 * 864e5; // on upgrade, rebuild sessions from logs this recent
 
 let state = load();
 let dirty = false;
 let lastSave = 0;
 let scanning = true;
 let recent = []; // { t, src, project, fam, tok }
-let events = []; // { src, fam, sub }
+let events = []; // { src, fam, sub, sid }
+let bf = null; // while backfilling sessions: { seen, totals }
 
 function blank() {
-  return { v: VERSION, files: {}, keys: {}, codex: {}, days: {} };
+  return { v: VERSION, files: {}, keys: {}, codex: {}, days: {}, sessions: {} };
 }
+
+let needBackfill = false;
 
 function load() {
   try {
     const s = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-    if (s && s.v === VERSION && s.files && s.keys && s.codex && s.days) return s;
+    if (s && s.v === VERSION && s.files && s.keys && s.codex && s.days) {
+      if (!s.sessions) {
+        s.sessions = {}; // added in 2.4: rebuilt from recent logs on first run
+        needBackfill = true;
+      }
+      return s;
+    }
   } catch {}
   return blank(); // older format: rebuild from the logs
 }
@@ -46,6 +57,7 @@ function save(force) {
   if (!force && now - lastSave < 60000) return;
   const cutoff = Math.floor(now / 864e5) - KEEP_KEYS_DAYS;
   for (const k in state.keys) if (state.keys[k] < cutoff) delete state.keys[k];
+  for (const id in state.sessions) if (state.sessions[id].last < now - KEEP_SESSIONS_MS) delete state.sessions[id];
   fs.mkdirSync(path.dirname(stateFile), { recursive: true });
   const tmp = stateFile + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(state));
@@ -56,9 +68,39 @@ function save(force) {
 
 const baseName = (p) => String(p || '').split(/[\\/]/).filter(Boolean).pop() || '';
 
+// Project folder name. A subagent's throwaway worktree
+// (<repo>/.claude/worktrees/agent-1a2b3c…) counts as its repo; named worktrees keep their name.
+function projectOf(cwd) {
+  const parts = String(cwd || '').split(/[\\/]/).filter(Boolean);
+  const n = parts.length;
+  if (n >= 4 && parts[n - 2] === 'worktrees' && parts[n - 3] === '.claude' && /^agent-[0-9a-f]{6,}$/.test(parts[n - 1])) return parts[n - 4];
+  return parts.pop() || '';
+}
+
+// Per-session totals, for the "This session" period and the context-size hint.
+// ctx is the context size of a main-thread response (null for subagents).
+function addSession(sid, t, src, project, fam, tok, ctx) {
+  if (!sid) return;
+  const ms = t.getTime();
+  const s = state.sessions[sid] || (state.sessions[sid] = { src, project, start: ms, last: ms, fams: {} });
+  if (ms < s.start) s.start = ms;
+  if (ms > s.last) s.last = ms;
+  if (!s.main && (!s.project || s.project === 'unknown')) s.project = project;
+  addTok(s.fams[fam] || (s.fams[fam] = zero()), { ...tok, req: 1 });
+  if (ctx != null && ms >= (s.ctxAt || 0)) {
+    s.ctx = ctx;
+    s.ctxAt = ms;
+    s.project = project; // named after where the main conversation is now, not a subagent
+    s.main = true;
+  }
+}
+
 // Records one API response.
-function add(t, src, project, model, tok, sub) {
+function add(t, src, project, model, tok, sub, sid, ctx) {
   const fam = familyOf(model);
+  addSession(sid, t, src, project || 'unknown', fam, tok, ctx);
+  dirty = true;
+  if (bf) return; // backfilling sessions only: days already counted
   const day = state.days[dayKey(t)] || (state.days[dayKey(t)] = {});
   const sp = `${src}|${project || 'unknown'}`;
   const byFam = day[sp] || (day[sp] = {});
@@ -70,41 +112,31 @@ function add(t, src, project, model, tok, sub) {
   a.req += 1;
   dirty = true;
   const age = Date.now() - t.getTime();
-  if (age < RECENT_MS) recent.push({ t: t.getTime(), src, project, fam, tok });
-  if (!scanning && age < EVENT_MS) events.push({ src, fam, sub: Boolean(sub) });
+  if (age < RECENT_MS) recent.push({ t: t.getTime(), src, project, fam, tok, sid });
+  if (!scanning && age < EVENT_MS) events.push({ src, fam, sub: Boolean(sub), sid });
 }
 
 // ── Claude Code ─────────────────────────────────────────────────────────────
 function claudeLine(line, file) {
-  if (line.indexOf('"usage"') === -1) return false;
-  let j;
-  try {
-    j = JSON.parse(line);
-  } catch {
-    return false;
-  }
-  if (j.type !== 'assistant') return false;
-  const m = j.message;
-  const u = m && m.usage;
-  if (!u || !m.id) return false;
-  const model = String(m.model || '');
-  if (!model.startsWith('claude')) return false;
+  const r = claudeUsage(line);
+  if (!r) return false;
+  const { j, model, key, tok } = r;
 
   // One response spans several lines with identical usage: count it once.
-  const key = 'c:' + m.id + ':' + (j.requestId || '');
-  if (key in state.keys) return false;
   const t = new Date(j.timestamp);
   if (isNaN(t)) return false;
-  state.keys[key] = Math.floor(t.getTime() / 864e5);
+  if (bf) {
+    if (bf.seen.has(key)) return false;
+    bf.seen.add(key);
+  } else {
+    if (key in state.keys) return false;
+    state.keys[key] = Math.floor(t.getTime() / 864e5);
+  }
 
   const sub = j.isSidechain === true || file.includes(`${path.sep}subagents${path.sep}`);
-  const tok = {
-    in: u.input_tokens || 0,
-    out: u.output_tokens || 0,
-    cw: u.cache_creation_input_tokens || 0,
-    cr: u.cache_read_input_tokens || 0,
-  };
-  add(t, 'claude', baseName(j.cwd) || baseName(path.dirname(file)), model, tok, sub);
+  const inSub = file.includes(`${path.sep}subagents${path.sep}`);
+  const sid = j.sessionId || (inSub ? baseName(path.dirname(path.dirname(file))) : path.basename(file, '.jsonl'));
+  add(t, 'claude', projectOf(j.cwd) || baseName(path.dirname(file)), model, tok, sub, sid, sub ? null : tok.in + tok.cw + tok.cr);
   return true;
 }
 
@@ -130,6 +162,7 @@ function codexLine(line, ctx) {
     ctx.session = p.id || p.session_id || ctx.session;
     ctx.cwd = p.cwd || ctx.cwd;
     ctx.sub = Boolean(p.parent_thread_id);
+    ctx.parent = p.parent_thread_id || null;
     return false;
   }
   if (j.type === 'turn_context') {
@@ -140,7 +173,8 @@ function codexLine(line, ctx) {
   const t = new Date(j.timestamp);
   if (isNaN(t)) return false;
   const sess = ctx.session || ctx.file;
-  const rec = state.codex[sess] || (state.codex[sess] = { total: null });
+  const totals = bf ? bf.totals : state.codex;
+  const rec = totals[sess] || (totals[sess] = { total: null });
 
   if (j.type === 'event_msg' && p.type === 'token_count' && p.info && p.info.total_token_usage) {
     const cur = p.info.total_token_usage;
@@ -153,8 +187,9 @@ function codexLine(line, ctx) {
       if (Object.values(u).some((v) => v < 0)) u = p.info.last_token_usage || {};
     }
     rec.total = cur;
-    dirty = true;
-    add(t, 'codex', baseName(ctx.cwd), ctx.model || 'gpt', codexTokens(u), ctx.sub);
+    const last = p.info.last_token_usage;
+    const size = !ctx.sub && last ? last.input_tokens || 0 : null;
+    add(t, 'codex', baseName(ctx.cwd), ctx.model || 'gpt', codexTokens(u), ctx.sub, ctx.parent || ctx.session || ctx.file, size);
     return true;
   }
   return false;
@@ -163,52 +198,31 @@ function codexLine(line, ctx) {
 // ── File reading ────────────────────────────────────────────────────────────
 const isCodex = (file) => codexRoots.some((r) => file.startsWith(r));
 
+// Codex files carry a context object (session id, model, folder); Claude files don't.
+function processText(file, text, ctx) {
+  let changed = false;
+  if (ctx) {
+    primeCodex(ctx, text);
+    for (const line of text.split('\n')) if (line && codexLine(line, ctx)) changed = true;
+  } else {
+    for (const line of text.split('\n')) if (claudeLine(line, file)) changed = true;
+  }
+  return changed;
+}
+
 // Plain .jsonl: read only new complete lines since last time.
 function processPlain(file, st) {
   const rec = state.files[file] || (state.files[file] = { offset: 0 });
   if (st.size < rec.offset) rec.offset = 0; // rewritten; ids already counted are skipped
   if (st.size === rec.offset) return false;
-  const codex = isCodex(file);
-  const ctx = codex ? rec.ctx || (rec.ctx = { file }) : null;
-
-  let fd;
-  try {
-    fd = fs.openSync(file, 'r');
-  } catch {
-    return false;
-  }
+  const ctx = isCodex(file) ? rec.ctx || (rec.ctx = { file }) : null;
   let changed = false;
-  let pos = rec.offset;
-  let carry = Buffer.alloc(0);
-  try {
-    while (pos < st.size) {
-      const len = Math.min(CHUNK, st.size - pos);
-      const buf = Buffer.allocUnsafe(len);
-      const n = fs.readSync(fd, buf, 0, len, pos);
-      if (n <= 0) break;
-      pos += n;
-      const data = carry.length ? Buffer.concat([carry, buf.subarray(0, n)]) : buf.subarray(0, n);
-      const nl = data.lastIndexOf(10);
-      if (nl === -1) {
-        carry = Buffer.from(data);
-        continue;
-      }
-      const text = data.toString('utf8', 0, nl);
-      if (codex) {
-        primeCodex(ctx, text);
-        for (const line of text.split('\n')) if (line && codexLine(line, ctx)) changed = true;
-      } else {
-        for (const line of text.split('\n')) if (claudeLine(line, file)) changed = true;
-      }
-      carry = Buffer.from(data.subarray(nl + 1));
-      const next = pos - carry.length;
-      if (next !== rec.offset) {
-        rec.offset = next;
-        dirty = true;
-      }
-    }
-  } finally {
-    fs.closeSync(fd);
+  const next = readLines(file, rec.offset, st.size, (text) => {
+    if (processText(file, text, ctx)) changed = true;
+  });
+  if (next !== rec.offset) {
+    rec.offset = next;
+    dirty = true;
   }
   return changed;
 }
@@ -231,10 +245,7 @@ function processZst(file, st) {
   } catch {
     return false; // still being written; try again on the next change
   }
-  const ctx = { file };
-  primeCodex(ctx, text);
-  let changed = false;
-  for (const line of text.split('\n')) if (line && codexLine(line, ctx)) changed = true;
+  const changed = processText(file, text, { file });
   rec.size = st.size;
   rec.mtime = st.mtimeMs;
   dirty = true;
@@ -266,6 +277,38 @@ function listFiles(dir, codex, out) {
   return out;
 }
 
+// One-time rebuild of per-session totals from recent logs, for state saved by an
+// older version. Reads only what was already counted; days are left untouched.
+function backfill() {
+  const since = Date.now() - BACKFILL_MS;
+  const list = [];
+  for (const f of files) {
+    const rec = state.files[f];
+    if (!rec) continue;
+    try {
+      const st = fs.statSync(f);
+      if (st.mtimeMs >= since) list.push({ f, st, rec });
+    } catch {}
+  }
+  list.sort((x, y) => x.st.mtimeMs - y.st.mtimeMs); // originals before resumed copies
+  bf = { seen: new Set(), totals: {} };
+  try {
+    for (const { f, st, rec } of list) {
+      if (f.endsWith('.zst')) {
+        if (!fzstd || rec.size !== st.size || rec.mtime !== st.mtimeMs) continue;
+        try {
+          processText(f, Buffer.from(fzstd.decompress(fs.readFileSync(f))).toString('utf8'), { file: f });
+        } catch {}
+      } else {
+        const ctx = isCodex(f) ? { file: f } : null;
+        readLines(f, 0, Math.min(rec.offset || 0, st.size), (text) => processText(f, text, ctx));
+      }
+    }
+  } finally {
+    bf = null;
+  }
+}
+
 let files = [];
 let known = new Set();
 
@@ -280,7 +323,7 @@ function relist() {
 function post(progress) {
   const cutoff = Date.now() - RECENT_MS;
   recent = recent.filter((r) => r.t >= cutoff);
-  parentPort.postMessage({ type: 'days', days: state.days, scanning, progress, recent, events });
+  parentPort.postMessage({ type: 'days', days: state.days, sessions: state.sessions, scanning, progress, recent, events });
   events = [];
 }
 
@@ -329,6 +372,12 @@ const tick = () => new Promise((r) => setImmediate(r));
 
 async function run() {
   relist();
+  if (needBackfill) {
+    try {
+      backfill();
+    } catch {}
+    needBackfill = false;
+  }
   const total = files.length;
   let last = 0;
   for (let i = 0; i < files.length; i++) {

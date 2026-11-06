@@ -1,11 +1,13 @@
 # ThirstyClaude
 
 A small always-on-top desktop widget that fills with the estimated water behind
-your Claude Code (and Codex) token use. Each response drips in live.
+your Claude Code (and Codex) token use. Each response drips in live. It can
+fill with the estimated CO₂ instead.
 
 <p>
   <img src="docs/today.png" alt="Graduated cylinder at 6.6 L, filled in coloured layers by project (demo data)" width="150">
   <img src="docs/all-time.png" alt="Bathtub at 417 L, about 2.8 bathtubs (demo data)" width="150">
+  <img src="docs/co2.png" alt="Swimming pool filled with grey billowing smoke, 55 kg CO₂e, with a context-size hint (demo data)" width="150">
   <img src="docs/legend.png" alt="Hover legend with range, energy, tokens, projects and drop colours (demo data)" width="150">
 </p>
 
@@ -72,9 +74,24 @@ Developed on Windows. macOS and Linux should work but haven't been tested.
   |---|---|---|---|---|
   | violet | red | green | magenta | amber |
 
+- **Level up.** When the amount outgrows its vessel (on Automatic), the old one
+  shrinks, tips over and pours into the next size up, with a small
+  "Bucket → Rain barrel" banner.
 - **Drag it around and the water sloshes.** It leans against the motion, surges
   when you stop, and settles. Glassware rocks quickly; the bathtub and pool sway
   slowly.
+- **CO₂ mode.** Choose *Fill with → CO₂* and the vessel fills with grey smoke:
+  the estimated CO₂ as gas, about 547 L per kg (CO₂ is heavier than air, so it
+  settles). Drops become puffs, and the legend compares the amount to driving a
+  car or to trees absorbing it.
+- **⚠ Context hint.** Every reply re-reads the whole conversation, so a long
+  session costs more per reply. When the active session's context passes 400K
+  tokens, an amber line such as "⚠ 452K context · /compact?" appears. The
+  legend shows what each reply costs at that size. The threshold can be changed
+  or turned off in the menu.
+- **Drip sounds** (off by default): a soft plink for each drop, lower for bigger
+  vessels, and a puff in CO₂ mode. The sounds are generated in the app, so there
+  are no audio files.
 - **The faint band is the likely range.** Every estimate here is uncertain, so the
   band shows how low or high it could plausibly be.
 - **▲ L/h is the flow rate:** your usage over the last 10 minutes, scaled to an
@@ -91,14 +108,42 @@ itself is for hovering). It remembers its position.
 | Option | What it does |
 |---|---|
 | Empty / Drain | Named for what's showing: "Empty test tube", "Empty cylinder", "Drain bathtub" or "Drain pool". Pours the water out, so you can measure one task ("since 3:42 PM"). Your real totals keep counting. `thirstyclaude --empty` does the same from a terminal. |
-| Period | Today, last 7 days, last 30 days, all time, or since emptied. |
-| Vessel | Automatic (grows with the amount), or always one vessel: test tube, glass, cylinder, bucket, rain barrel, bathtub, hot tub or pool. |
+| Period | This session, today, last 7 days, last 30 days, all time, or since emptied. *This session* follows the newest session that has replied in the last 10 minutes, so it starts from zero whenever you open a new one. If no session is active, it shows the last one that replied. |
+| Fill with | Water, or CO₂ (carbon emissions). |
 | Estimate | ThirstyClaude or EcoLogits (see below). |
 | Water counted | Including power plants, or data-center cooling only. |
 | Include Codex | Count Codex sessions as well as Claude Code. |
+| Context hint | Over 200K, 400K (default) or 600K tokens, or off. |
+| Drip sounds | Off by default. |
+| Vessel | Automatic (grows with the amount), or always one vessel: test tube, glass, cylinder, bucket, rain barrel, bathtub, hot tub or pool. |
 | Size | Tiny, Small, Medium, Large, Extra large or Huge (60%–200%). |
 | Always on top | Keeps the widget above other windows. |
 | Start with Windows / Open at login | Starts the widget when you log in (Windows and macOS). |
+
+## Status line for Claude Code
+
+`thirstyclaude --statusline` prints one line for Claude Code's status bar:
+
+```
+💧 85 mL this session · 1.4 L today · ⚠ 452K context
+```
+
+To use it, add this to `~/.claude/settings.json`:
+
+```json
+{
+  "statusLine": { "type": "command", "command": "thirstyclaude --statusline" }
+}
+```
+
+How it works:
+
+- **This session** is read from the session's own transcript, so it works even
+  when the widget isn't running. Only new lines are read each time.
+- **Today** appears while the widget is running.
+- **The context warning** uses the same threshold as the widget.
+- **Settings:** it follows the widget's Fill with, Estimate and Water counted
+  choices.
 
 ## Privacy
 
@@ -117,7 +162,9 @@ itself is for hovering). It remembers its position.
   - Linux: `~/.config/ThirstyClaude`
 
   The app keeps a running total there, so the all-time figure doesn't drop when
-  old logs are deleted.
+  old logs are deleted. It also writes a small `status.json` (today's total and
+  recent sessions) for the status line, and the status line keeps its read
+  positions in `statusline.json`.
 
 ## How the estimate works
 
@@ -170,6 +217,20 @@ the open methodology from GenAI Impact:
 - **Data-center cooling only** counts just the cooling water. That's about 0.5 L
   per kWh.
 
+### CO₂
+
+CO₂ = estimated energy × 0.394 kg CO₂ per kWh. That figure is the US grid
+average including line losses (EPA eGRID2022), as used by EPA's
+[Greenhouse Gas Equivalencies Calculator](https://www.epa.gov/energy/greenhouse-gas-equivalencies-calculator-calculations-and-references).
+
+- **Range:** the ThirstyClaude estimate also spans cleaner and dirtier grids
+  (0.25–0.45 kg per kWh).
+- **Not included:** emissions from manufacturing the hardware.
+- **Comparisons**, also from EPA:
+  - An average gasoline car emits 393 g per mile (244 g per km).
+  - An urban tree absorbs about 60 kg a year.
+  - A phone charge uses 0.019 kWh.
+
 To use your own assumptions, edit the constants in [`model.js`](model.js).
 
 Background reading:
@@ -185,15 +246,19 @@ Background reading:
 |---|---|
 | `--empty` | Empties the vessel, even while the widget is already running. |
 | `--demo` | Shows made-up data, for trying it out or taking screenshots. |
-| `--period=today` | Starts on a period: `today`, `week`, `month` or `all`. |
+| `--period=today` | Starts on a period: `session`, `today`, `week`, `month` or `all`. |
 | `--vessel=tub` | Starts with a vessel: `auto`, `tube`, `glass`, `cylinder`, `bucket`, `barrel`, `tub`, `hottub` or `pool`. |
 | `--size=large` | Starts at a size: `tiny`, `small`, `medium`, `large`, `xl` or `huge`. |
+| `--show=co2` | Starts filled with `water` or `co2`. |
+| `--sounds` | Turns drip sounds on. |
+| `--statusline` | Prints the status line (see above) instead of starting the widget. |
 
 ## Uninstall
 
 1. Choose Quit from the tray menu.
 2. Run `npm uninstall -g thirstyclaude`.
-3. Delete the app data folder listed above.
+3. If you added the status line, remove `statusLine` from `~/.claude/settings.json`.
+4. Delete the app data folder listed above.
 
 ## License
 

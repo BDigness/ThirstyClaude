@@ -38,12 +38,28 @@ const TC_ENERGY_RANGE = { lo: 0.5, hi: 2 };
 // Litres per kWh: data-center cooling (~0.15–1.1 across major clouds), plus water
 // evaporated at power plants (~2.5–3 on an average US grid).
 const TC_WATER = { allIn: { lo: 2, mid: 3, hi: 4 }, cooling: { lo: 0.15, mid: 0.5, hi: 1.1 } };
+// kg CO₂ per kWh: US grid average 0.394 including line losses (EPA eGRID2022,
+// as used by EPA's Greenhouse Gas Equivalencies Calculator). Cleaner regional
+// grids ~0.25, dirtier ~0.45. Electricity only: no hardware manufacturing.
+const GRID_CO2 = { lo: 0.25, mid: 0.394, hi: 0.45 };
+// Everyday comparisons, from the same EPA calculator.
+const CO2_EQUIV = {
+  carKgPerKm: 0.244, // average gasoline car: 393 g per mile
+  phoneKwh: 0.019, // energy to charge a smartphone once
+  treeKgPerYear: 60, // CO₂ taken up by one urban tree in a year
+};
+// Volume of CO₂ gas at 20 °C and sea-level pressure.
+const CO2_LITERS_PER_KG = 547;
 
 function tcEstimate(fam, t, mode) {
   const mid = ((TC_FACTOR[fam] ?? 1) * (t.in * WH_PER_MTOK.in + t.out * WH_PER_MTOK.out + t.cw * WH_PER_MTOK.cw + t.cr * WH_PER_MTOK.cr)) / 1e6;
   const w = TC_WATER[mode] || TC_WATER.allIn;
   const wh = { lo: mid * TC_ENERGY_RANGE.lo, mid, hi: mid * TC_ENERGY_RANGE.hi };
-  return { wh, l: { lo: (wh.lo / 1000) * w.lo, mid: (wh.mid / 1000) * w.mid, hi: (wh.hi / 1000) * w.hi } };
+  return {
+    wh,
+    l: { lo: (wh.lo / 1000) * w.lo, mid: (wh.mid / 1000) * w.mid, hi: (wh.hi / 1000) * w.hi },
+    co2: { lo: (wh.lo / 1000) * GRID_CO2.lo, mid: (wh.mid / 1000) * GRID_CO2.mid, hi: (wh.hi / 1000) * GRID_CO2.hi },
+  };
 }
 
 // ── Method 2: EcoLogits ─────────────────────────────────────────────────────
@@ -91,9 +107,11 @@ function ecoEstimate(fam, t, mode) {
   const spec = ECO_MODELS[fam] || ECO_MODELS.opus;
   const lo = ecoBound(spec, 0, t.out, mode);
   const hi = ecoBound(spec, 1, t.out, mode);
+  const wh = { lo: lo.wh, mid: (lo.wh + hi.wh) / 2, hi: hi.wh };
   return {
-    wh: { lo: lo.wh, mid: (lo.wh + hi.wh) / 2, hi: hi.wh },
+    wh,
     l: { lo: lo.l, mid: (lo.l + hi.l) / 2, hi: hi.l },
+    co2: { lo: (wh.lo / 1000) * GRID_CO2.mid, mid: (wh.mid / 1000) * GRID_CO2.mid, hi: (wh.hi / 1000) * GRID_CO2.mid },
   };
 }
 
@@ -107,13 +125,14 @@ const addTok = (a, b) => {
 
 // Estimate for a { family: tokens } map.
 function estimate(famMap, method, mode) {
-  const out = { wh: { lo: 0, mid: 0, hi: 0 }, l: { lo: 0, mid: 0, hi: 0 }, tokens: zero() };
+  const out = { wh: { lo: 0, mid: 0, hi: 0 }, l: { lo: 0, mid: 0, hi: 0 }, co2: { lo: 0, mid: 0, hi: 0 }, tokens: zero() };
   for (const fam in famMap) {
     const t = famMap[fam];
     const e = method === 'eco' ? ecoEstimate(fam, t, mode) : tcEstimate(fam, t, mode);
     for (const k of ['lo', 'mid', 'hi']) {
       out.wh[k] += e.wh[k];
       out.l[k] += e.l[k];
+      out.co2[k] += e.co2[k];
     }
     addTok(out.tokens, t);
   }
@@ -195,4 +214,7 @@ module.exports = {
   gpuCount,
   ecoItKwhPerToken,
   TC_WATER,
+  GRID_CO2,
+  CO2_EQUIV,
+  CO2_LITERS_PER_KG,
 };

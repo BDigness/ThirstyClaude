@@ -67,7 +67,30 @@
   #liters { font-size: 21px; font-weight: 600; letter-spacing: 0.2px; font-variant-numeric: tabular-nums; line-height: 1.2; }
   #caption, #period { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; }
   #period { color: var(--faint); font-size: 10px; }
-  #period .rate { color: var(--accent); }
+  #period { display: flex; justify-content: center; }
+  #period .pt { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  #period .rate { color: var(--accent); flex: none; }
+  #liters small { font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+  #hint { font-size: 9.5px; color: #f0b24a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; }
+  #hint:empty { display: none; }
+  .levelup {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translate(-50%, -4px);
+    padding: 2px 8px;
+    border-radius: 9px;
+    background: rgba(124, 196, 255, 0.16);
+    border: 1px solid rgba(124, 196, 255, 0.28);
+    font-size: 9.5px;
+    white-space: nowrap;
+    color: var(--text);
+    opacity: 0;
+    transition: opacity .3s, transform .3s;
+    pointer-events: none;
+  }
+  .levelup.on { opacity: 1; transform: translate(-50%, 0); }
+  .card.co2 .levelup { background: rgba(195, 200, 207, 0.14); border-color: rgba(195, 200, 207, 0.28); }
 
   .tick { stroke: rgba(230, 240, 255, 0.7); stroke-width: 1; }
   .label { fill: rgba(234, 241, 251, 0.72); font-size: 8.5px; font-variant-numeric: tabular-nums; }
@@ -82,9 +105,15 @@
   .wave.back { animation-duration: 5.5s; animation-direction: reverse; opacity: 0.5; }
   @keyframes drift { from { transform: translateX(0); } to { transform: translateX(-24px); } }
   .ripple { transform-box: fill-box; transform-origin: center; }
+  #puffs { display: none; }
+  .card.co2 #puffs { display: inline; }
+  #puffs circle { transform-box: fill-box; transform-origin: center; animation: puff 9s ease-in-out infinite alternate; }
+  @keyframes puff { from { transform: translateX(-4px) scale(.9); } to { transform: translateX(4px) scale(1.15); } }
+  .card.co2 .wave.back { opacity: 0.85; }
+  .card.co2 #bands { opacity: 0.9; }
   #rig { transform-box: view-box; transform-origin: 79px 228px; }
   @media (prefers-reduced-motion: reduce) {
-    .wave { animation: none; }
+    .wave, #puffs circle { animation: none; }
     #water, #bands rect, #range rect { transition: none; }
   }
 
@@ -104,7 +133,8 @@
     overflow: hidden;
   }
   .card.show-legend .legend { opacity: 1; }
-  .lg-head { color: var(--faint); text-transform: uppercase; letter-spacing: .6px; font-size: 8.5px; }
+  .lg-head { color: var(--faint); text-transform: uppercase; letter-spacing: .6px; font-size: 8.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lg-hint { color: #f0b24a; margin-top: 2px; }
   .lg-big { color: var(--text); font-size: 14px; font-weight: 600; margin-top: 1px; font-variant-numeric: tabular-nums; }
   .lg-sec { color: var(--faint); text-transform: uppercase; letter-spacing: .6px; font-size: 8.5px; margin-top: 6px; }
   .lg-item { display: flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
@@ -131,6 +161,10 @@
         <stop offset="0.18" stop-color="#fff" stop-opacity="0"/>
         <stop offset="1" stop-color="#000" stop-opacity="0.3"/>
       </linearGradient>
+      <radialGradient id="puffGrad">
+        <stop offset="0" stop-color="#eef2f7" stop-opacity="0.34"/>
+        <stop offset="1" stop-color="#eef2f7" stop-opacity="0"/>
+      </radialGradient>
     </defs>
     <g id="rig">
       <g id="behind"></g>
@@ -139,6 +173,7 @@
           <g id="slosh">
             <g id="chopBack"><path id="waveBack" class="wave back"/></g>
             <g id="bands"></g>
+            <g id="puffs"></g>
             <rect x="-10" y="0" width="160" height="240" fill="url(#depth)"/>
             <g id="chopFront"><path id="waveFront" class="wave"/></g>
           </g>
@@ -156,12 +191,14 @@
     <g id="spill"></g>
   </svg>
   <div id="hits"></div>
+  <div class="levelup" id="levelup"></div>
   </div>
   <div class="tip" id="tip"></div>
   <div class="info" id="info">
     <div id="liters">…</div>
     <div id="caption">reading logs</div>
     <div id="period"></div>
+    <div id="hint"></div>
   </div>
   <div class="legend" id="legend"></div>
 </div>

@@ -1,7 +1,7 @@
 {
   "name": "thirstyclaude",
   "productName": "ThirstyClaude",
-  "version": "2.3.1",
+  "version": "2.4.0",
   "private": true,
   "description": "A desktop widget that fills with the estimated water behind your Claude Code and Codex tokens",
   "main": "main.js",
@@ -17,6 +17,8 @@
     "main.js",
     "scanner.js",
     "model.js",
+    "logread.js",
+    "statusline.js",
     "preload.js",
     "index.html",
     "renderer.js",

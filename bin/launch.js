@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 // Starts ThirstyClaude in the background and returns to the prompt.
+// With --statusline it prints one line for Claude Code's status bar instead.
 const path = require('path');
 const { spawn } = require('child_process');
+
+if (process.argv.includes('--statusline')) {
+  require('../statusline.js');
+  return;
+}
 
 let electron;
 try {
