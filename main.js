@@ -560,6 +560,7 @@ async function snapshot() {
     rate: all.rate,
     days: Object.keys(days).length,
     vessel,
+    caption: await win.webContents.executeJavaScript("document.getElementById('caption').textContent"),
     menu: buildMenu().items.map((i) => i.label).filter(Boolean),
   };
   fs.writeFileSync(SNAPSHOT.replace(/\.png$/i, '') + '.json', JSON.stringify(summary, null, 2));

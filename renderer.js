@@ -236,13 +236,26 @@ function fmtRate(lph) {
   return lph < 1 ? `${Math.round(lph * 1000)} mL/h` : `${lph.toFixed(1)} L/h`;
 }
 
-function caption(l) {
-  const n = (x) => (x < 10 ? x.toFixed(1).replace(/\.0$/, '') : Math.round(x).toLocaleString('en-US'));
-  const say = (x, one, many) => `≈ ${n(x)} ${n(x) === '1' ? one : many}`;
-  if (l < 2) return say(l / 0.25, 'glass', 'glasses');
-  if (l < 150) return say(l / 10, 'bucket', 'buckets');
-  if (l < 50000) return say(l / 150, 'bathtub', 'bathtubs');
-  return say(l / 50000, 'backyard pool', 'backyard pools');
+// The caption counts in whichever vessel is showing: [litres each, singular, plural].
+const VESSEL_UNITS = {
+  tube: [0.02, 'test tube', 'test tubes'],
+  glass: [0.25, 'glass', 'glasses'],
+  cylinder: [1, 'cylinder', 'cylinders'],
+  bucket: [10, 'bucket', 'buckets'],
+  barrel: [200, 'rain barrel', 'rain barrels'],
+  tub: [150, 'bathtub', 'bathtubs'],
+  hottub: [1500, 'hot tub', 'hot tubs'],
+  pool: [50000, 'swimming pool', 'swimming pools'], // backyard size
+};
+
+function caption(l, vessel) {
+  const [size, one, many] = VESSEL_UNITS[vessel] || VESSEL_UNITS.tub;
+  if (l <= 0) return 'empty';
+  const x = l / size;
+  if (x < 0.001) return `< 0.001 ${many}`;
+  const n =
+    x < 0.01 ? x.toFixed(3) : x < 1 ? x.toFixed(2) : x < 10 ? x.toFixed(1).replace(/\.0$/, '') : Math.round(x).toLocaleString('en-US');
+  return `≈ ${n} ${n === '1' ? one : many}`;
 }
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -635,7 +648,7 @@ function render(s) {
     $('caption').textContent = `reading logs ${s.progress.done}/${s.progress.total}`;
     $('period').textContent = '';
   } else {
-    $('caption').textContent = caption(L);
+    $('caption').textContent = caption(L, cur.vessel);
     $('period').innerHTML = esc(s.periodText) + (s.rate > 0 ? ` · <span class="rate">▲ ${fmtRate(s.rate)}</span>` : '');
   }
   legend(s);

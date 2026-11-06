@@ -47,8 +47,20 @@ Developed on Windows. macOS and Linux should work but haven't been tested.
   | Hot tub | up to 20,000 L |
   | Swimming pool | anything larger |
 
-  You can also pin one vessel in the menu. A caption puts the amount in
-  everyday terms (≈ glasses, buckets, bathtubs, backyard pools).
+  You can also pin one vessel in the menu. The caption counts the amount in
+  whichever vessel is showing, for example "≈ 2.1 rain barrels" or
+  "≈ 0.03 swimming pools".
+
+  | Vessel | Counted as |
+  |---|---|
+  | Test tube | 20 mL |
+  | Glass | 250 mL |
+  | Cylinder | 1 L |
+  | Bucket | 10 L |
+  | Rain barrel | 200 L |
+  | Bathtub | 150 L |
+  | Hot tub | 1,500 L |
+  | Swimming pool | 50,000 L (backyard size) |
 - **Layers are projects.** Your five biggest projects get a colour each, and the
   rest go into "Other". A project keeps its colour over time. Hover over a layer
   to see its project, litres and share.
