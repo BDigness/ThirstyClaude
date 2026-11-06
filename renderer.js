@@ -33,6 +33,20 @@ const VESSELS = {
       <rect class="solid" x="58" y="213" width="42" height="12" rx="3"/>
       <path class="solid" d="M44 225 H114 L119 231 H39 Z" stroke-width="1.1"/>`,
   },
+  glass: {
+    clip: 'M57 62 L65 198 Q65 201 68 201 L90 201 Q93 201 93 198 L101 62 Z',
+    bottom: 200,
+    top: 72,
+    drip: [79, 22],
+    hit: [60, 98],
+    tilt: true,
+    behind: '<path d="M57 62 L65 198 Q65 201 68 201 L90 201 Q93 201 93 198 L101 62 Z" fill="url(#glassGrad)"/>',
+    front: `<path class="glass" d="M54 57 L63 204 Q63.5 210 69 210 L89 210 Q94.5 210 95 204 L104 57"/>
+      <ellipse class="glass" cx="79" cy="57.5" rx="25" ry="2.2" stroke-width="1.1"/>
+      <path class="glass" d="M64 201.5 H94" stroke-width="1" opacity="0.6"/>
+      <path d="M94 70 L89 190" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.13"/>
+      <ellipse class="solid" cx="79" cy="214" rx="30" ry="3"/>`,
+  },
   cylinder: {
     clip: 'M58.5 12 H99.5 V206 Q99.5 208 97.5 208 H60.5 Q58.5 208 58.5 206 Z',
     bottom: 206,
@@ -47,6 +61,37 @@ const VESSELS = {
       <rect x="94" y="22" width="2.2" height="170" rx="1.1" fill="#fff" opacity="0.13"/>
       <rect class="solid" x="60" y="209" width="38" height="9"/>
       <path class="solid" d="M40 218 H118 L127 231 H31 Z" stroke-width="1.1"/>`,
+  },
+  bucket: {
+    clip: 'M37 112 L48 202 Q48 205 51 205 L107 205 Q110 205 110 202 L121 112 Z',
+    bottom: 204,
+    top: 118,
+    drip: [79, 72],
+    hit: [40, 118],
+    tilt: false,
+    behind: '<path d="M37 112 L48 202 Q48 205 51 205 L107 205 Q110 205 110 202 L121 112 Z" fill="#fff" fill-opacity="0.05"/>',
+    front: `<path class="glass" d="M34 108 Q79 22 124 108" stroke-width="1.4"/>
+      <rect class="solid" x="72" y="62" width="14" height="5" rx="2.5"/>
+      <path class="glass" d="M34 108 L45.5 205 Q46 209 50 209 L108 209 Q112 209 112.5 205 L124 108" stroke-width="1.6"/>
+      <rect class="solid" x="30" y="104" width="98" height="6" rx="3"/>
+      <path class="glass" d="M39 144 H119 M43 178 H115" stroke-width="1" opacity="0.45"/>
+      <circle class="solid" cx="34" cy="108" r="2.6"/>
+      <circle class="solid" cx="124" cy="108" r="2.6"/>`,
+  },
+  barrel: {
+    clip: 'M39 100 Q34 155 39 208 L119 208 Q124 155 119 100 Z',
+    bottom: 206,
+    top: 108,
+    drip: [62, 84],
+    hit: [38, 120],
+    tilt: false,
+    behind: '<path d="M39 100 Q34 155 39 208 L119 208 Q124 155 119 100 Z" fill="#fff" fill-opacity="0.05"/>',
+    front: `<path class="glass" d="M40 0 V64 Q40 76 52 76 H64" stroke-width="4"/>
+      <path class="glass" d="M36 97 Q30 155 36 212 L122 212 Q128 155 122 97" stroke-width="1.6"/>
+      <ellipse class="glass" cx="79" cy="97.5" rx="43" ry="3" stroke-width="1.2"/>
+      <path class="glass" d="M33 124 Q79 128 125 124 M32 184 Q79 188 126 184" stroke-width="2.2" opacity="0.55"/>
+      <path class="glass" d="M35 198 H26 V203" stroke-width="2.4"/>
+      <rect class="solid" x="30" y="212" width="98" height="5" rx="2"/>`,
   },
   tub: {
     clip: 'M17 124 C17 166 27 190 50 192 L88 192 C111 190 121 166 121 124 Z',
@@ -63,6 +108,21 @@ const VESSELS = {
       <path class="glass" d="M4 56 H23 Q30 56 30 63 V79" stroke-width="3.2"/>
       <path class="glass" d="M10 52 V56" stroke-width="2"/>
       <rect class="solid" x="5" y="47" width="10" height="5" rx="2.5"/>`,
+  },
+  hottub: {
+    clip: 'M14 126 V166 H27 V204 H111 V166 H124 V126 Z',
+    bottom: 203,
+    top: 132,
+    drip: [69, 46],
+    hit: [14, 124],
+    tilt: false,
+    behind: `<rect x="6" y="120" width="126" height="94" rx="5" fill="#fff" fill-opacity="0.04"/>
+      <path d="M14 126 V166 H27 V204 H111 V166 H124 V126 Z" fill="#7cc4ff" fill-opacity="0.07"/>`,
+    front: `<path class="glass" d="M14 124 V166 H27 V204 H111 V166 H124 V124" stroke-width="1.4"/>
+      <rect class="solid" x="4" y="118" width="130" height="7" rx="3.5"/>
+      <path class="glass" d="M8 125 V210 Q8 214 12 214 H126 Q130 214 130 210 V125" stroke-width="1.6"/>
+      <path class="glass" d="M8 146 H14 M8 170 H27 M8 194 H27 M124 146 H130 M111 170 H130 M111 194 H130" stroke-width="1" opacity="0.35"/>
+      <path d="M52 112 q-4 -8 0 -16 q4 -8 0 -16 M69 110 q-4 -8 0 -16 q4 -8 0 -16 M86 112 q-4 -8 0 -16 q4 -8 0 -16" fill="none" stroke="rgba(214,230,255,0.22)" stroke-width="1.6" stroke-linecap="round"/>`,
   },
   pool: {
     clip: 'M8 104 L8 150 Q8 154 12 154 L58 158 L80 198 Q82 202 86 202 L126 202 Q130 202 130 198 L130 104 Z',
@@ -83,10 +143,15 @@ const VESSELS = {
   },
 };
 
+// Automatic: each vessel covers roughly its real-world capacity.
 function vesselFor(liters) {
-  if (liters < 1) return 'tube';
-  if (liters < 200) return 'cylinder';
-  if (liters < 20000) return 'tub';
+  if (liters < 0.1) return 'tube';
+  if (liters < 1) return 'glass';
+  if (liters < 10) return 'cylinder';
+  if (liters < 50) return 'bucket';
+  if (liters < 300) return 'barrel';
+  if (liters < 2000) return 'tub';
+  if (liters < 20000) return 'hottub';
   return 'pool';
 }
 
@@ -136,7 +201,8 @@ function drawTicks(v, cap, unit) {
   const g = $('ticks');
   g.textContent = '';
   if (!v.ticks) return;
-  const fmtTick = (x) => (cap >= 2000 ? `${+(x / 1000).toFixed(1)}k` : Number.isInteger(x) ? String(x) : x.toFixed(1));
+  const fmtTick = (x) =>
+    cap >= 2e6 ? `${+(x / 1e6).toFixed(1)}M` : cap >= 2000 ? `${+(x / 1000).toFixed(1)}k` : Number.isInteger(x) ? String(x) : x.toFixed(1);
   for (let i = 1; i <= 20; i++) {
     const y = (v.bottom - ((v.bottom - v.top) * i) / 20).toFixed(1);
     const major = i % 4 === 0;
@@ -427,8 +493,12 @@ function legend(s) {
 // Narrow glassware rocks quickly; the tub and pool sway slowly.
 const SLOSH = {
   tube: { hz: 2.3, max: 22, cx: 79, damping: 0.1 },
+  glass: { hz: 2.0, max: 16, cx: 79, damping: 0.1 },
   cylinder: { hz: 1.9, max: 18, cx: 79, damping: 0.1 },
+  bucket: { hz: 1.3, max: 11, cx: 79, damping: 0.09 },
+  barrel: { hz: 1.1, max: 9, cx: 79, damping: 0.09 },
   tub: { hz: 0.95, max: 9, cx: 69, damping: 0.08 },
+  hottub: { hz: 0.8, max: 7, cx: 69, damping: 0.08 },
   pool: { hz: 0.6, max: 5, cx: 69, damping: 0.07 },
 };
 const G = 21000; // px/s²: a brisk drag tilts the water a few degrees
@@ -513,14 +583,14 @@ function render(s) {
   const L = s.liters.mid;
   let switched = false;
   if (!pouring || !cur.vessel) {
-    const name = vesselFor(L);
+    const name = VESSELS[s.vessel] ? s.vessel : vesselFor(L); // a chosen vessel, or grow with the amount
     if (name !== cur.vessel) {
       setVessel(name);
       switched = true;
     }
   }
   const v = VESSELS[cur.vessel];
-  const unit = cur.vessel === 'tube' ? 'mL' : 'L';
+  const unit = L < 1 ? 'mL' : 'L';
   const k = unit === 'mL' ? 1000 : 1;
   if (!pouring || !cur.cap) {
     const cap = capacityFor(L * k);

@@ -14,6 +14,9 @@ const EMPTY_ON_START = Boolean(arg('empty'));
 const SNAPSHOT = (arg('snapshot') || '').split('=').slice(1).join('=') || null;
 // --period=today|week|month|all   start on that period (handy with --demo)
 const PERIOD_ARG = (arg('period') || '').split('=')[1] || null;
+// --size=tiny|small|medium|large|xl|huge   --vessel=auto|tube|cylinder|tub|pool
+const SIZE_ARG = (arg('size') || '').split('=')[1] || null;
+const VESSEL_ARG = (arg('vessel') || '').split('=')[1] || null;
 
 // Local-only app: keep Chromium's background networking off.
 app.commandLine.appendSwitch('disable-background-networking');
@@ -24,7 +27,19 @@ const BASE = { w: 160, h: 334 };
 const LAYER_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181'];
 const OTHER_COLOR = '#6b7280';
 const RATE_WINDOW_MS = 10 * 60 * 1000;
-const SIZES = { small: 0.8, medium: 1, large: 1.3 };
+const SIZES = { tiny: 0.6, small: 0.8, medium: 1, large: 1.3, xl: 1.6, huge: 2 };
+const SIZE_LABELS = { tiny: 'Tiny', small: 'Small', medium: 'Medium', large: 'Large', xl: 'Extra large', huge: 'Huge' };
+const VESSELS = [
+  ['auto', 'Automatic (grows with the amount)'],
+  ['tube', 'Test tube'],
+  ['glass', 'Drinking glass'],
+  ['cylinder', 'Graduated cylinder'],
+  ['bucket', 'Bucket'],
+  ['barrel', 'Rain barrel'],
+  ['tub', 'Bathtub'],
+  ['hottub', 'Hot tub'],
+  ['pool', 'Swimming pool'],
+];
 const PERIODS = [
   ['today', 'Today'],
   ['week', 'Last 7 days'],
@@ -40,6 +55,7 @@ const DEFAULTS = {
   visible: true,
   x: null,
   y: null,
+  vessel: 'auto', // or a fixed one: tube, cylinder, tub, pool
   method: 'tc', // 'tc' = ThirstyClaude estimate, 'eco' = EcoLogits
   includeCodex: true,
   colors: {}, // project name -> layer colour slot, so colours follow the project
@@ -59,7 +75,16 @@ let quitting = false;
 let pendingEmpty = EMPTY_ON_START;
 let recent = []; // responses from the last hour, for the flow rate
 let vessel = 'cylinder'; // what the widget currently shows (reported by the page)
-const EMPTY_LABELS = { tube: 'Empty test tube', cylinder: 'Empty cylinder', tub: 'Drain bathtub', pool: 'Drain pool' };
+const EMPTY_LABELS = {
+  tube: 'Empty test tube',
+  glass: 'Empty glass',
+  cylinder: 'Empty cylinder',
+  bucket: 'Empty bucket',
+  barrel: 'Drain rain barrel',
+  tub: 'Drain bathtub',
+  hottub: 'Drain hot tub',
+  pool: 'Drain pool',
+};
 
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 const stateFile = () => path.join(app.getPath('userData'), 'state.json');
@@ -212,6 +237,7 @@ function push(events = []) {
       emptiedAt: settings.emptiedAt,
       mode: settings.mode,
       method: settings.method,
+      vessel: settings.vessel,
       scanning,
       progress,
       events: events.filter((e) => settings.includeCodex || e.src !== 'codex'),
@@ -352,10 +378,19 @@ function createWindow() {
 
 function setSize(size) {
   settings.size = size;
-  saveSettings();
   const z = zoom();
-  win.setBounds({ width: Math.round(BASE.w * z), height: Math.round(BASE.h * z) });
+  const w = Math.round(BASE.w * z);
+  const h = Math.round(BASE.h * z);
+  // Keep the whole widget on screen when it grows.
+  const [x, y] = win.getPosition();
+  const wa = screen.getDisplayMatching({ x, y, width: w, height: h }).workArea;
+  const nx = Math.max(wa.x, Math.min(x, wa.x + wa.width - w));
+  const ny = Math.max(wa.y, Math.min(y, wa.y + wa.height - h));
+  win.setBounds({ x: nx, y: ny, width: w, height: h });
   win.webContents.setZoomFactor(z);
+  settings.x = nx;
+  settings.y = ny;
+  saveSettings();
 }
 
 function toggleVisible() {
@@ -410,9 +445,16 @@ function buildMenu() {
     },
     { label: 'Include Codex', type: 'checkbox', checked: settings.includeCodex, click: (item) => set({ includeCodex: item.checked }) },
     {
+      label: 'Vessel',
+      submenu: VESSELS.map(([id, label], i) => [
+        { label, type: 'radio', checked: settings.vessel === id, click: () => set({ vessel: id }) },
+        ...(i === 0 ? [{ type: 'separator' }] : []),
+      ]).flat(),
+    },
+    {
       label: 'Size',
       submenu: Object.keys(SIZES).map((s) => ({
-        label: s[0].toUpperCase() + s.slice(1),
+        label: `${SIZE_LABELS[s]} (${Math.round(SIZES[s] * 100)}%)`,
         type: 'radio',
         checked: settings.size === s,
         click: () => setSize(s),
@@ -551,6 +593,10 @@ if (!SNAPSHOT && !DEMO && !app.requestSingleInstanceLock()) {
 
     settings = DEMO ? { ...DEFAULTS, colors: {} } : loadSettings();
     if (PERIOD_ARG && PERIODS.some(([id]) => id === PERIOD_ARG && id !== 'since')) settings.period = PERIOD_ARG;
+    if (SIZE_ARG && SIZES[SIZE_ARG]) settings.size = SIZE_ARG;
+    if (VESSEL_ARG && VESSELS.some(([id]) => id === VESSEL_ARG)) settings.vessel = VESSEL_ARG;
+    if (!SIZES[settings.size]) settings.size = 'medium';
+    if (!VESSELS.some(([id]) => id === settings.vessel)) settings.vessel = 'auto';
     createWindow();
     if (!SNAPSHOT) {
       tray = new Tray(trayIcon());

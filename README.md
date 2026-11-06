@@ -33,10 +33,22 @@ Developed on Windows. macOS and Linux should work but haven't been tested.
 
 ## What you're looking at
 
-- **The vessel grows with the amount.** It goes from a test tube (under 1 L) to a
-  graduated cylinder (up to 200 L), then a bathtub, then a swimming pool. A
-  caption puts the amount in everyday terms (≈ glasses, buckets, bathtubs,
-  backyard pools).
+- **The vessel grows with the amount.** Each vessel roughly matches its real
+  capacity:
+
+  | Vessel | Shown for |
+  |---|---|
+  | Test tube | under 100 mL |
+  | Drinking glass | up to 1 L |
+  | Graduated cylinder | up to 10 L |
+  | Bucket | up to 50 L |
+  | Rain barrel | up to 300 L |
+  | Bathtub | up to 2,000 L |
+  | Hot tub | up to 20,000 L |
+  | Swimming pool | anything larger |
+
+  You can also pin one vessel in the menu. A caption puts the amount in
+  everyday terms (≈ glasses, buckets, bathtubs, backyard pools).
 - **Layers are projects.** Your five biggest projects get a colour each, and the
   rest go into "Other". A project keeps its colour over time. Hover over a layer
   to see its project, litres and share.
@@ -68,10 +80,12 @@ itself is for hovering). It remembers its position.
 |---|---|
 | Empty / Drain | Named for what's showing: "Empty test tube", "Empty cylinder", "Drain bathtub" or "Drain pool". Pours the water out, so you can measure one task ("since 3:42 PM"). Your real totals keep counting. `thirstyclaude --empty` does the same from a terminal. |
 | Period | Today, last 7 days, last 30 days, all time, or since emptied. |
+| Vessel | Automatic (grows with the amount), or always one vessel: test tube, glass, cylinder, bucket, rain barrel, bathtub, hot tub or pool. |
 | Estimate | ThirstyClaude or EcoLogits (see below). |
 | Water counted | Including power plants, or data-center cooling only. |
 | Include Codex | Count Codex sessions as well as Claude Code. |
-| Size, Always on top | Size and placement. |
+| Size | Tiny, Small, Medium, Large, Extra large or Huge (60%–200%). |
+| Always on top | Keeps the widget above other windows. |
 | Start with Windows / Open at login | Starts the widget when you log in (Windows and macOS). |
 
 ## Privacy
@@ -160,6 +174,8 @@ Background reading:
 | `--empty` | Empties the vessel, even while the widget is already running. |
 | `--demo` | Shows made-up data, for trying it out or taking screenshots. |
 | `--period=today` | Starts on a period: `today`, `week`, `month` or `all`. |
+| `--vessel=tub` | Starts with a vessel: `auto`, `tube`, `glass`, `cylinder`, `bucket`, `barrel`, `tub`, `hottub` or `pool`. |
+| `--size=large` | Starts at a size: `tiny`, `small`, `medium`, `large`, `xl` or `huge`. |
 
 ## Uninstall
 
