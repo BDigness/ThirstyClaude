@@ -38,7 +38,8 @@ Developed on Windows. macOS and Linux should work but haven't been tested.
   caption puts the amount in everyday terms (≈ glasses, buckets, bathtubs,
   backyard pools).
 - **Layers are projects.** Your five biggest projects get a colour each, and the
-  rest go into "Other". A project keeps its colour over time.
+  rest go into "Other". A project keeps its colour over time. Hover over a layer
+  to see its project, litres and share.
 - **Drops are responses.** Each response drips in within about 0.1 seconds of
   being written to the log. Drops are coloured by model, and smaller drops come
   from subagents.
@@ -57,7 +58,8 @@ Developed on Windows. macOS and Linux should work but haven't been tested.
 ## Menu
 
 Right-click the widget, or the tray icon. Click the tray icon to show or hide the
-widget. Drag the widget anywhere; it remembers its position.
+widget. Drag the widget anywhere by its glass, edges or empty space (the water
+itself is for hovering). It remembers its position.
 
 | Option | What it does |
 |---|---|

@@ -24,6 +24,7 @@ const VESSELS = {
     top: 34,
     ticks: { x: 66, label: 60 },
     drip: [79, 2],
+    hit: [66, 92],
     tilt: true,
     behind: '<path d="M66 16 L66 196 A13 13 0 0 0 92 196 L92 16 Z" fill="url(#glassGrad)"/>',
     front: `<path class="glass" d="M61 11 Q64 12 65 16 L65 196 A14 14 0 0 0 93 196 L93 16 Q94 12 97 11"/>
@@ -38,6 +39,7 @@ const VESSELS = {
     top: 30,
     ticks: { x: 58, label: 52 },
     drip: [79, 2],
+    hit: [58.5, 99.5],
     tilt: true,
     behind: '<rect x="58" y="12" width="42" height="197" fill="url(#glassGrad)"/>',
     front: `<path class="glass" d="M51 9 Q56 10 57 15 L57 206 Q57 209 60 209 L98 209 Q101 209 101 206 L101 15 Q101 11 105 9"/>
@@ -51,6 +53,7 @@ const VESSELS = {
     bottom: 190,
     top: 128,
     drip: [30, 84],
+    hit: [17, 121],
     tilt: false,
     behind: '<path d="M17 124 C17 166 27 190 50 192 L88 192 C111 190 121 166 121 124 Z" fill="#fff" fill-opacity="0.05"/>',
     front: `<path class="glass" d="M12 122 C12 170 25 197 50 199 L88 199 C113 197 126 170 126 122" stroke-width="1.6"/>
@@ -66,6 +69,7 @@ const VESSELS = {
     bottom: 202,
     top: 110,
     drip: [70, 32],
+    hit: [8, 130],
     tilt: false,
     behind: `<path d="M2 104 H136 V214 H2 Z" fill="#fff" fill-opacity="0.035"/>
       <path d="M8 104 L8 150 Q8 154 12 154 L58 158 L80 198 Q82 202 86 202 L126 202 Q130 202 130 198 L130 104 Z" fill="#7cc4ff" fill-opacity="0.06"/>`,
@@ -205,6 +209,59 @@ function applyLevel(y, layers) {
   const surface = layers.length ? layers[0].color : '#3987e5';
   $('waveFront').style.fill = surface;
   $('waveBack').style.fill = surface;
+  renderHits(layers, y, H, total, v);
+}
+
+// ── Layer tooltips ──────────────────────────────────────────────────────────
+// One hover target per layer, sized to the layer's final position.
+let hitLayers = [];
+
+function renderHits(layers, y, H, total, v) {
+  const box = $('hits');
+  hitLayers = layers.map((l) => ({ ...l, share: total > 0 ? l.liters / total : 0 }));
+  while (box.childElementCount < layers.length) {
+    const d = document.createElement('div');
+    d.className = 'hit';
+    d.addEventListener('mousemove', (e) => showTip(hitLayers[+d.dataset.i], e));
+    d.addEventListener('mouseleave', hideTip);
+    d.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      hideTip();
+      window.thirsty.menu();
+    });
+    box.appendChild(d);
+  }
+  while (box.childElementCount > layers.length) box.lastChild.remove();
+  let top = y;
+  hitLayers.forEach((l, i) => {
+    const h = H * l.share;
+    const d = box.children[i];
+    d.dataset.i = i;
+    d.style.left = `${v.hit[0]}px`;
+    d.style.width = `${v.hit[1] - v.hit[0]}px`;
+    d.style.top = `${top - (i === 0 ? 3 : 0)}px`; // include the wave crest on the top layer
+    d.style.height = `${Math.max(0, h + (i === 0 ? 3 : 0) + (i === hitLayers.length - 1 ? 2 : 0))}px`;
+    top += h;
+  });
+  if (!hitLayers.length) hideTip();
+}
+
+function showTip(l, e) {
+  if (!l) return;
+  const tip = $('tip');
+  const pct = l.share >= 0.995 ? '100%' : l.share < 0.01 ? '<1%' : `${Math.round(l.share * 100)}%`;
+  tip.innerHTML = `<i style="background:${l.color}"></i><b>${esc(l.name)}</b>${fmtLiters(l.liters)} · ${pct}`;
+  const r = card.getBoundingClientRect();
+  const w = tip.offsetWidth;
+  let x = e.clientX - r.left + 12;
+  if (x + w > r.width - 4) x = e.clientX - r.left - w - 10;
+  tip.style.left = `${Math.max(4, x)}px`;
+  tip.style.top = `${Math.max(4, e.clientY - r.top - 26)}px`;
+  tip.classList.add('on');
+}
+
+function hideTip() {
+  $('tip').classList.remove('on');
 }
 
 // Moves the surface now, or after `delay` ms (so it rises when the first drop lands).

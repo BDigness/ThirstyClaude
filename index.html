@@ -37,7 +37,32 @@
     padding: 6px 0 9px;
     box-sizing: border-box;
   }
-  svg { display: block; width: 138px; height: 236px; overflow: visible; flex: none; }
+  .stage { position: relative; width: 138px; height: 236px; flex: none; }
+  svg { display: block; width: 138px; height: 236px; overflow: visible; }
+  /* Hover targets over each water layer (the rest of the widget stays draggable). */
+  #hits { position: absolute; inset: 0; pointer-events: none; }
+  .hit { position: absolute; pointer-events: auto; -webkit-app-region: no-drag; cursor: default; }
+  .tip {
+    position: absolute;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 7px;
+    border-radius: 6px;
+    background: rgba(12, 15, 22, 0.96);
+    border: 1px solid var(--edge);
+    font-size: 10px;
+    white-space: nowrap;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .1s;
+  }
+  .tip.on { opacity: 1; }
+  .tip i { width: 7px; height: 7px; border-radius: 2px; flex: none; }
+  .tip b { color: var(--text); font-weight: 600; }
   .info { -webkit-app-region: no-drag; text-align: center; margin-top: 2px; cursor: default; width: 100%; }
   #liters { font-size: 21px; font-weight: 600; letter-spacing: 0.2px; font-variant-numeric: tabular-nums; line-height: 1.2; }
   #caption, #period { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; }
@@ -92,6 +117,7 @@
 </head>
 <body>
 <div class="card" id="card">
+  <div class="stage">
   <svg viewBox="0 0 138 236" aria-hidden="true">
     <defs>
       <clipPath id="vclip"><path id="vclipPath"/></clipPath>
@@ -127,6 +153,9 @@
     </g>
     <g id="spill"></g>
   </svg>
+  <div id="hits"></div>
+  </div>
+  <div class="tip" id="tip"></div>
   <div class="info" id="info">
     <div id="liters">…</div>
     <div id="caption">reading logs</div>
