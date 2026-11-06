@@ -38,7 +38,7 @@
     box-sizing: border-box;
   }
   .stage { position: relative; width: 138px; height: 236px; flex: none; }
-  svg { display: block; width: 138px; height: 236px; overflow: visible; }
+  .stage > svg { display: block; width: 138px; height: 236px; overflow: visible; }
   /* Hover targets over each water layer (the rest of the widget stays draggable). */
   #hits { position: absolute; inset: 0; pointer-events: none; }
   .hit { position: absolute; pointer-events: auto; -webkit-app-region: no-drag; cursor: default; }
@@ -105,15 +105,10 @@
   .wave.back { animation-duration: 5.5s; animation-direction: reverse; opacity: 0.5; }
   @keyframes drift { from { transform: translateX(0); } to { transform: translateX(-24px); } }
   .ripple { transform-box: fill-box; transform-origin: center; }
-  #puffs { display: none; }
-  .card.co2 #puffs { display: inline; }
-  #puffs circle { transform-box: fill-box; transform-origin: center; animation: puff 9s ease-in-out infinite alternate; }
-  @keyframes puff { from { transform: translateX(-4px) scale(.9); } to { transform: translateX(4px) scale(1.15); } }
-  .card.co2 .wave.back { opacity: 0.85; }
 
-  /* Rubber duck: only in the bathtub, hot tub and pool, and not in CO₂ */
+  /* Rubber duck: only in the bathtub, hot tub and pool */
   #duck { display: none; }
-  .card.ducky:not(.co2) #duck { display: inline; }
+  .card.ducky #duck { display: inline; }
   #duckDrift { animation: duckDrift 11s ease-in-out infinite alternate; }
   #duckBob { animation: duckBob 2.6s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: 50% 80%; }
   @keyframes duckDrift { from { transform: translateX(-7px); } to { transform: translateX(7px); } }
@@ -122,7 +117,7 @@
   /* Ice after a few idle hours: animations pause while frozen */
   #ice { transition: opacity 20s linear; }
   #cracks { transition: opacity .3s; }
-  .card.frozen .wave, .card.frozen #duckDrift, .card.frozen #duckBob, .card.frozen #puffs circle { animation-play-state: paused; }
+  .card.frozen .wave, .card.frozen #duckDrift, .card.frozen #duckBob { animation-play-state: paused; }
 
   /* Boiling: steam wisps above the surface */
   #steam { display: none; transition: transform 1.4s cubic-bezier(.2, .8, .2, 1), opacity .8s; }
@@ -153,10 +148,65 @@
   .jl { font-size: 7.5px; line-height: 9px; color: var(--faint); text-align: center; }
   .jw.today .jl { color: var(--accent); }
   .card.shelf30 .jl { display: none; }
-  .card.co2 #bands { opacity: 0.9; }
   #rig { transform-box: view-box; transform-origin: 79px 228px; }
+
+  /* CO₂ scenes replace the vessel */
+  #scene { display: none; }
+  .card.co2 #scene { display: inline; }
+  .card.co2 #rig, .card.co2 #source, .card.co2 #spill, .card.co2 #hits { display: none; }
+  #sceneArt { transform-box: view-box; transform-origin: 69px 222px; }
+  .sc-badge { fill: var(--muted); font-size: 9px; font-variant-numeric: tabular-nums; }
+  .sc-pct { fill: #dfe6ee; font-size: 8px; font-variant-numeric: tabular-nums; }
+  .sc-unit { fill: var(--faint); font-size: 8px; letter-spacing: .4px; }
+  .sc-roll text { fill: #eaf1fb; font-size: 12.5px; font-weight: 600; }
+  .sc-roll.tenth text { fill: #12161d; }
+  .sc-roll { transition: transform .9s cubic-bezier(.3,.7,.3,1); }
+  .sc-batt { transform-box: fill-box; transform-origin: 50% 100%; }
+  .sc-batt, .sc-tip, .sc-wisps, .sc-hand, .sc-sapling { transition: transform 1.4s cubic-bezier(.2,.8,.2,1); }
+  .sc-paper { transition: x 1.4s cubic-bezier(.2,.8,.2,1), width 1.4s cubic-bezier(.2,.8,.2,1); }
+  .sc-wedge { transition: stroke-dasharray 1.4s cubic-bezier(.2,.8,.2,1); }
+  .sc-sapling { transform-box: fill-box; transform-origin: 50% 100%; }
+  .sc-live { transition: opacity 2s; }
+  .sc-ember { transition: fill 2s; }
+  .sc-off .sc-live, .card.frozen .sc-live { opacity: 0; }
+  .sc-off .sc-ember, .card.frozen .sc-ember { fill: #8f949b; }
+  .sc-zzz { display: none; fill: var(--faint); font-size: 9px; letter-spacing: 1px; }
+  .card.frozen .sc-zzz { display: inline; animation: scZzz 3s ease-in-out infinite alternate; }
+  @keyframes scZzz { from { transform: translateY(0); opacity: .5; } to { transform: translateY(-4px); opacity: 1; } }
+  .card.frozen #scene * { animation-play-state: paused; }
+  .card.frozen #scene .sc-zzz { animation-play-state: running; }
+  .sc-lean { transform: skewX(calc(var(--lean, 0) * 1deg)); transform-box: fill-box; transform-origin: 50% 100%; }
+  /* Puffs, wisps and sparks: rise (or sink), grow (or shrink) and fade */
+  .sc-puff { transform-box: fill-box; transform-origin: var(--origin, center); animation: scRise var(--dur, 3s) linear infinite; opacity: 0; }
+  @keyframes scRise {
+    0% { transform: translate(0, 0) scale(var(--s0, .7)); opacity: 0; }
+    8% { opacity: var(--op, .7); }
+    100% { transform: translate(var(--dx, 0px), var(--dy, -40px)) scale(var(--grow, 2.4)); opacity: 0; }
+  }
+  .sc-flame { transform-box: fill-box; transform-origin: 50% 100%; animation: scFlame .62s ease-in-out infinite alternate; }
+  .sc-flame.f2 { animation-duration: .5s; }
+  .sc-flame.f3 { animation-duration: .41s; }
+  @keyframes scFlame { 0% { transform: scale(1, .86) skewX(-4deg); } 50% { transform: scale(.92, 1.07) skewX(2deg); } 100% { transform: scale(1.05, .94) skewX(5deg); } }
+  .sc-glow { transform-box: fill-box; transform-origin: center; animation: scGlow 1.8s ease-in-out infinite alternate; }
+  @keyframes scGlow { from { opacity: .55; transform: scale(.9); } to { opacity: 1; transform: scale(1.15); } }
+  .sc-bolt { animation: scBlink 1.6s ease-in-out infinite alternate; }
+  @keyframes scBlink { from { opacity: .5; } to { opacity: 1; } }
+  .sc-idle .sc-body { animation: scIdle .13s linear infinite alternate; }
+  @keyframes scIdle { from { transform: translateY(0); } to { transform: translateY(-.6px); } }
+  .sc-drive .sc-body { animation: scBump .7s ease-in-out infinite; }
+  @keyframes scBump { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-.9px); } }
+  .sc-drive .sc-spokes { transform-box: fill-box; transform-origin: center; animation: scSpin .45s linear infinite; }
+  @keyframes scSpin { to { transform: rotate(360deg); } }
+  .sc-road { animation: scRoad .4s linear infinite; }
+  @keyframes scRoad { to { stroke-dashoffset: 16; } }
+  .sc-speed path { stroke: rgba(234, 241, 251, .45); stroke-width: 1; stroke-linecap: round; animation: scSpeed .6s linear infinite; }
+  @keyframes scSpeed { from { transform: translateX(6px); opacity: 0; } 30% { opacity: 1; } to { transform: translateX(-14px); opacity: 0; } }
+  .sc-crown { transform-box: fill-box; transform-origin: 50% 100%; animation: scSway 5.5s ease-in-out infinite alternate; }
+  @keyframes scSway { from { transform: rotate(-2deg); } to { transform: rotate(2deg); } }
+  .sc-off .sc-spokes, .sc-off .sc-body, .sc-off .sc-road, .sc-off .sc-roll { animation: none; }
   @media (prefers-reduced-motion: reduce) {
-    .wave, #puffs circle, #duckDrift, #duckBob, .wisp { animation: none; }
+    .wave, #duckDrift, #duckBob, .wisp, #scene * { animation: none !important; }
+    .sc-puff { display: none; }
     #water, #bands rect, #range rect { transition: none; }
   }
 
@@ -204,9 +254,19 @@
         <stop offset="0.18" stop-color="#fff" stop-opacity="0"/>
         <stop offset="1" stop-color="#000" stop-opacity="0.3"/>
       </linearGradient>
-      <radialGradient id="puffGrad">
-        <stop offset="0" stop-color="#eef2f7" stop-opacity="0.34"/>
-        <stop offset="1" stop-color="#eef2f7" stop-opacity="0"/>
+      <radialGradient id="scPuff">
+        <stop offset="0" stop-color="#d5d9df" stop-opacity="0.9"/>
+        <stop offset="0.55" stop-color="#c3c8cf" stop-opacity="0.55"/>
+        <stop offset="1" stop-color="#c3c8cf" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="scSoot">
+        <stop offset="0" stop-color="#6c727b" stop-opacity="0.95"/>
+        <stop offset="0.6" stop-color="#5a6069" stop-opacity="0.7"/>
+        <stop offset="1" stop-color="#5a6069" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="scGlow">
+        <stop offset="0" stop-color="#ffb36b" stop-opacity="0.85"/>
+        <stop offset="1" stop-color="#ffb36b" stop-opacity="0"/>
       </radialGradient>
     </defs>
     <g id="source"></g>
@@ -225,7 +285,6 @@
               <circle cx="4.5" cy="-6.6" r="0.5" fill="#1b1f27"/>
             </g></g></g>
             <g id="bands"></g>
-            <g id="puffs"></g>
             <rect x="-10" y="0" width="160" height="240" fill="url(#depth)"/>
             <g id="bubbles"></g>
             <g id="chopFront"><path id="waveFront" class="wave"/></g>
@@ -249,6 +308,7 @@
       <g id="drops"></g>
     </g>
     <g id="spill"></g>
+    <g id="scene"><g id="sceneArt"></g><g id="sceneFx"></g></g>
   </svg>
   <div id="hits"></div>
   <div class="levelup" id="levelup"></div>
@@ -263,6 +323,7 @@
   <div class="shelf" id="shelf"></div>
   <div class="legend" id="legend"></div>
 </div>
+<script src="scenes.js"></script>
 <script src="renderer.js"></script>
 </body>
 </html>

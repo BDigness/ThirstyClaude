@@ -16,12 +16,6 @@ const dropColor = (fam) => (fam.startsWith('gpt') ? '#c98500' : (DROPS.find((d) 
 
 const mixHex = (a, b, t) =>
   '#' + [1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - t) + parseInt(b.slice(i, i + 2), 16) * t).toString(16).padStart(2, '0')).join('');
-// CO₂ mode: a light grey haze over the project colours. More than ~15% makes
-// neighbouring layers hard to tell apart (checked with a palette validator).
-const smoke = (hex) => mixHex(hex, '#9aa1ab', 0.15);
-// In CO₂ mode, which vessel to draw follows the gas volume (about 547 L per kg
-// at 20 °C), but everything shown is in kilograms and everyday comparisons.
-const CO2_L_PER_KG = 547;
 const LADDER = ['tube', 'glass', 'cylinder', 'bucket', 'barrel', 'tub', 'hottub', 'pool'];
 const VESSEL_NAMES = { tube: 'Test tube', glass: 'Glass', cylinder: 'Cylinder', bucket: 'Bucket', barrel: 'Rain barrel', tub: 'Bathtub', hottub: 'Hot tub', pool: 'Swimming pool' };
 
@@ -234,43 +228,18 @@ function wavePath(amp, len, phase = 0, dy = 0) {
   for (let x = -10; x <= 160; x += 2) d += ` L${x} ${(dy + amp * Math.sin((x / len) * 2 * Math.PI + phase)).toFixed(2)}`;
   return d + ' L160 6 L-10 6 Z';
 }
-// Smoke surface: rounded billows, two per 24px so the drift still loops.
-function billowPath(r, dy = 0, shift = 0) {
-  let x = -10 - shift;
-  let d = `M${x} ${dy}`;
-  for (; x < 160; x += 2 * r) d += ` a${r} ${(r * 0.8).toFixed(2)} 0 0 1 ${2 * r} 0`;
-  return d + ` L${x} 6 L${-10 - shift} 6 Z`;
-}
-
-let look = null; // true while showing CO₂
+let look = null; // true while showing CO₂ (a scene instead of the vessel; see scenes.js)
+$('waveFront').setAttribute('d', wavePath(1.4, 24));
+$('waveBack').setAttribute('d', wavePath(1.8, 24, Math.PI, -0.6));
 function setLook(co2) {
   if (look === co2) return;
   look = co2;
-  $('waveFront').setAttribute('d', co2 ? billowPath(6, 1.6) : wavePath(1.4, 24));
-  $('waveBack').setAttribute('d', co2 ? billowPath(6, -0.8, 6) : wavePath(1.8, 24, Math.PI, -0.6));
   card.classList.toggle('co2', co2);
-  if (cur.vessel) drawSource();
-}
-
-// Every vessel has something filling it. In CO₂ mode it's an exhaust pipe.
-function exhaust([x, y]) {
-  return `<rect class="solid" x="${x - 3.5}" y="-4" width="7" height="${y - 5}"/>
-    <rect class="solid" x="${x - 4.5}" y="${y - 30}" width="9" height="3" rx="1"/>
-    <rect class="solid" x="${x - 4.5}" y="${y - 18}" width="9" height="3" rx="1"/>
-    <path class="solid" d="M${x - 4.5} ${y - 9} L${x - 6} ${y - 3} H${x + 6} L${x + 4.5} ${y - 9} Z"/>
-    <ellipse cx="${x}" cy="${y - 3}" rx="6" ry="1.3" fill="#1b1f27" fill-opacity="0.65"/>`;
 }
 
 function drawSource() {
   const v = VESSELS[cur.vessel];
-  $('source').innerHTML = look ? exhaust(v.drip) : v.source || '';
-}
-
-// Soft puffs drifting through the smoke (shown only in CO₂ mode).
-for (let i = 0; i < 16; i++) {
-  const c = el('circle', { cx: ((i * 37) % 150) - 5, cy: 7 + ((i * 53) % 200), r: 7 + (i % 4) * 2.4, fill: 'url(#puffGrad)' });
-  c.style.animationDelay = `${-i * 1.3}s`;
-  $('puffs').appendChild(c);
+  $('source').innerHTML = v.source || '';
 }
 
 function capacityFor(v) {
@@ -381,12 +350,22 @@ function co2Unit(kg, pick, q) {
   return pick in co2Units(q) ? pick : co2UnitFor(kg);
 }
 
-// Units for the scale: water in mL or L, CO₂ in g, kg or t.
-function scaleFor(x, co2) {
-  if (co2) return x < 1 ? ['g', 1000] : x < 1000 ? ['kg', 1] : ['t', 0.001];
+// Units for the scale: mL or L.
+function scaleFor(x) {
   return x < 1 ? ['mL', 1000] : ['L', 1];
 }
 const fmtRateKg = (kgph) => (kgph < 1 ? `${Math.round(kgph * 1000)} g/h` : `${kgph.toFixed(1)} kg/h`);
+
+// The CO₂ rate in the comparison on show: "0.013 tires/h", "17 min idling/h".
+const RATE_UNITS = { phone: ['charge', 'charges'], cigarette: ['cigarette', 'cigarettes'], km: ['km', 'km'], tire: ['tire', 'tires'], tree: ['tree', 'trees'] };
+function co2RateSay(kgph, unit, q) {
+  const x = kgph / co2Units(q)[unit][0];
+  const sig = (v) => (v >= 10 ? Math.round(v).toLocaleString('en-US') : String(+v.toPrecision(2)));
+  if (unit === 'idle') return x < 1 ? `${sig(x * 60)} min idling/h` : `${sig(x)} h idling/h`;
+  const n = sig(x);
+  const [one, many] = RATE_UNITS[unit];
+  return `${n} ${n === '1' ? one : many}/h`;
+}
 
 // The caption counts in whichever vessel is showing: [litres each, singular, plural].
 const VESSEL_UNITS = {
@@ -437,10 +416,10 @@ function applyLevel(y, layers) {
     r.style.fill = l.color;
     top += h;
   });
-  // Smoke has a grey, cloudy top; water takes the top layer's colour.
-  const surface = look ? '#b4bac3' : layers.length ? layers[0].color : '#3987e5';
+  // The surface takes the top layer's colour.
+  const surface = layers.length ? layers[0].color : '#3987e5';
   $('waveFront').style.fill = surface;
-  $('waveBack').style.fill = look ? '#858c96' : surface;
+  $('waveBack').style.fill = surface;
   renderHits(layers, y, H, total, v);
 }
 
@@ -561,9 +540,9 @@ function nextDrip() {
 }
 
 function drip(e, y) {
+  if (look) return sceneEvent(e); // CO₂: a puff from the scene instead
   const [x, y0] = VESSELS[cur.vessel].drip;
   const s = e.sub ? 0.65 : 1;
-  if (look) return puff(e, x, y0, y, s);
   const drop = el('path', { d: 'M0 -8 C2.6 -4 3.9 -1.3 0 2 C-3.9 -1.3 -2.6 -4 0 -8Z', fill: dropColor(e.fam) });
   drop.style.opacity = '0';
   $('drops').appendChild(drop);
@@ -579,37 +558,6 @@ function drip(e, y) {
   ).onfinish = () => {
     drop.remove();
     splash(x, y, dropColor(e.fam), s);
-    sound(e.sub);
-  };
-}
-
-// CO₂ mode: a grey puff, tinted by model, sinks in (CO₂ is heavier than air).
-function puff(e, x, y0, y, s) {
-  const color = mixHex(dropColor(e.fam), '#c3c8cf', 0.5);
-  const p = el('circle', { r: 3.4, fill: color });
-  p.style.opacity = '0';
-  $('drops').appendChild(p);
-  const total = (FORM_MS + fallMs(y - y0)) * 1.3;
-  p.animate(
-    [
-      { transform: `translate(${x}px, ${y0 + 1}px) scale(${0.3 * s})`, opacity: 0, easing: 'ease-out' },
-      { transform: `translate(${x}px, ${y0 + 3}px) scale(${s})`, opacity: 0.85, offset: 0.25, easing: 'cubic-bezier(.45,0,.9,.6)' },
-      { transform: `translate(${x + 2}px, ${y - 2}px) scale(${1.25 * s})`, opacity: 0.8 },
-    ],
-    { duration: total, fill: 'both' }
-  ).onfinish = () => {
-    p.remove();
-    for (const [dx, d] of [[-1, 0], [1, 90]]) {
-      const ring = el('circle', { cx: x + dx * 2, cy: y, r: 2.4 * s, fill: color });
-      $('drops').appendChild(ring);
-      ring.animate(
-        [
-          { transform: 'translate(0, 0) scale(1)', opacity: 0.7 },
-          { transform: `translate(${dx * 6 * s}px, ${-3 * s}px) scale(2.6)`, opacity: 0 },
-        ],
-        { duration: 900, delay: d, easing: 'ease-out', fill: 'both' }
-      ).onfinish = () => ring.remove();
-    }
     sound(e.sub);
   };
 }
@@ -807,6 +755,7 @@ function splash(x, y, color, s) {
 let pouringUntil = 0;
 
 function pour() {
+  if (look) return clearScene();
   pouringUntil = Date.now() + 1600;
   cancelDrips();
   if (!VESSELS[cur.vessel].tilt) {
@@ -823,7 +772,7 @@ function pour() {
     { duration: 1600, easing: 'ease-in-out' }
   );
   for (let i = 0; i < 6; i++) {
-    const drop = el('path', { d: 'M0 -4 C1.4 -2 2 -0.7 0 1 C-2 -0.7 -1.4 -2 0 -4Z', fill: look ? '#b8bec7' : '#8fd6ff' });
+    const drop = el('path', { d: 'M0 -4 C1.4 -2 2 -0.7 0 1 C-2 -0.7 -1.4 -2 0 -4Z', fill: '#8fd6ff' });
     drop.style.opacity = '0';
     $('spill').appendChild(drop);
     const x0 = 13 + Math.random() * 4;
@@ -839,6 +788,20 @@ function pour() {
   setTimeout(() => lastState && render(lastState), 1650);
 }
 
+// CO₂: the scene fades out and comes back at zero.
+function clearScene() {
+  pouringUntil = Date.now() + 600;
+  cancelDrips();
+  const sc = $('scene');
+  sc.getAnimations().forEach((a) => a.cancel());
+  sc.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 500, fill: 'forwards' });
+  setTimeout(() => {
+    if (lastState) render(lastState);
+    sc.getAnimations().forEach((a) => a.cancel());
+    sc.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 500 });
+  }, 650);
+}
+
 // ── Hover legend ────────────────────────────────────────────────────────────
 function legend(s, co2) {
   const amt = co2 ? s.co2 : s.liters;
@@ -846,7 +809,7 @@ function legend(s, co2) {
   const items = s.layers
     .map(
       (l) =>
-        `<div class="lg-item"><i style="background:${co2 ? smoke(l.color) : l.color}"></i><span class="nm">${esc(l.name)}</span><span>${co2 ? fmtCo2(l.kg) : fmtLiters(l.liters)}</span></div>`
+        `<div class="lg-item"><i style="background:${l.color}"></i><span class="nm">${esc(l.name)}</span><span>${co2 ? fmtCo2(l.kg) : fmtLiters(l.liters)}</span></div>`
     )
     .join('');
   const drops = DROPS.map(([, label, c]) => `<span><b style="color:${c}">●</b>${label}</span>`).join('');
@@ -876,7 +839,19 @@ function legend(s, co2) {
     ${hint}
     <div class="lg-sec">Projects</div>${items || '<div>None yet</div>'}
     <div class="lg-sec">${co2 ? 'Puffs' : 'Drops'}</div><div class="lg-drops">${drops}</div>
-    <div class="lg-foot">${co2 ? 'Small puffs are subagents. CO₂ is heavier than air, so it settles.' : 'Small drops are subagents. Band = likely range.'}<br>${method}, ${basis}.</div>`;
+    <div class="lg-foot">${co2 && s.equiv ? co2Basis(co2Unit(amt.mid, s.co2Unit, s.equiv), s.equiv) + ' Small puffs are subagents.' : 'Small drops are subagents. Band = likely range.'}<br>${method}, ${basis}.</div>`;
+}
+
+// What one of each comparison is worth, for the legend.
+function co2Basis(unit, q) {
+  return {
+    phone: `1 charge ≈ ${fmtCo2(q.phoneKg)}.`,
+    cigarette: `1 cigarette ≈ ${fmtCo2(q.cigaretteKg)}; a pack holds 20.`,
+    idle: `1 h idling ≈ ${fmtCo2(q.idleKgPerHour)}.`,
+    km: `1 km ≈ ${fmtCo2(q.carKgPerKm)}.`,
+    tire: `1 tire ≈ ${fmtCo2(q.tireKg)}.`,
+    tree: `1 tree takes up ≈ ${fmtCo2(q.treeKgPerYear)} a year.`,
+  }[unit] || '';
 }
 
 // ── Slosh: the water tilts and settles when the widget is dragged ───────────
@@ -947,6 +922,7 @@ function sloshStep(now) {
   $('chopFront').setAttribute('transform', `scale(1 ${chop.toFixed(2)})`);
   $('chopBack').setAttribute('transform', `scale(1 ${chop.toFixed(2)})`);
   if (DUCK_X[cur.vessel]) $('duck').setAttribute('transform', `translate(${(DUCK_X[cur.vessel] - motion.th * 0.7).toFixed(2)} 0)`); // slides downhill
+  $('scene').style.setProperty('--lean', clamp(motion.th * 1.6, -16, 16).toFixed(2)); // CO₂: flames and smoke trail behind
   spillStep(dt, s, now);
 
   const settled =
@@ -959,6 +935,7 @@ function sloshStep(now) {
   if (settled) {
     for (const id of ['slosh', 'chopFront', 'chopBack']) $(id).removeAttribute('transform');
     if (DUCK_X[cur.vessel]) $('duck').setAttribute('transform', `translate(${DUCK_X[cur.vessel]} 0)`);
+    $('scene').style.removeProperty('--lean');
     motion.th = motion.w = motion.b = motion.bv = 0;
     motion.running = false;
     return;
@@ -978,7 +955,7 @@ let lastSpill = 0;
 
 function spillStep(dt, s, now) {
   const v = VESSELS[cur.vessel];
-  const wet = waterEl.style.opacity !== '0' && surfaceY < v.bottom - 3 && iceLevel < 0.6 && Date.now() >= pouringUntil;
+  const wet = !look && waterEl.style.opacity !== '0' && surfaceY < v.bottom - 3 && iceLevel < 0.6 && Date.now() >= pouringUntil;
   const rising = Math.sign(motion.w) === Math.sign(motion.th) && Math.abs(motion.th) > 2;
   if (wet && rising && now - lastSpill > 40 && spillDrops.length < 14) {
     const left = motion.th > 0; // tilted clockwise: the left wall is the high side
@@ -988,7 +965,7 @@ function spillStep(dt, s, now) {
     if (up > SPILL_MIN) {
       lastSpill = now;
       const yWall = surfaceY - arm * Math.tan(Math.abs((motion.th * Math.PI) / 180)) + motion.b;
-      const color = look ? '#b8bec7' : (lastState && lastState.layers[0] && lastState.layers[0].color) || '#8fd6ff';
+      const color = (lastState && lastState.layers[0] && lastState.layers[0].color) || '#8fd6ff';
       const d = el('circle', { r: (1 + Math.random() * 0.6).toFixed(2), fill: color });
       $('spill').appendChild(d);
       spillDrops.push({ el: d, color, x: wallX, y: yWall, vx: (left ? -1 : 1) * (12 + Math.random() * 30), vy: -up * (0.7 + Math.random() * 0.5), x0: v.hit[0], x1: v.hit[1], rim: RIM[cur.vessel] ?? v.top, out: false });
@@ -1054,7 +1031,7 @@ function updateIce(lastAt) {
     iceReady = true;
     instant([$('ice')]);
     setIce(f);
-  } else if (iceLevel > 0.15 && f < iceLevel - 0.1 && !REDUCED_MOTION) thaw();
+  } else if (iceLevel > 0.15 && f < iceLevel - 0.1 && !REDUCED_MOTION && !look) thaw();
   else setIce(f);
 }
 
@@ -1148,6 +1125,7 @@ for (const dx of [-11, 0, 11]) {
 // x: 0 (calm) to 1 (full boil).
 function setBoil(x) {
   const v = VESSELS[cur.vessel];
+  if (!v) return; // nothing drawn yet (CO₂ shows a scene instead)
   const depth = Math.max(0, v.bottom - surfaceY);
   const n = depth > 6 ? Math.round(x * BUBBLES) : 0;
   card.classList.toggle('boiling', x > 0.05);
@@ -1225,29 +1203,22 @@ let prevReq = null;
 let prevEmptied; // undefined until the first update arrives
 let fadeTimer = null;
 
-function render(s) {
-  lastState = s;
-  if (prevEmptied !== undefined && s.emptiedAt && s.emptiedAt !== prevEmptied) pour();
-  prevEmptied = s.emptiedAt;
-  const pouring = Date.now() < pouringUntil;
+// The responses since the last update (or plain ones, if the list is missing).
+function newEvents(s) {
+  if (s.events && s.events.length) return s.events;
+  return Array.from({ length: Math.max(1, Math.min(MAX_QUEUED, s.tokens.req - (prevReq ?? s.tokens.req))) }, () => ({ fam: 'opus', sub: false }));
+}
 
-  const co2 = s.show === 'co2';
-  setLook(co2);
-  // What fills the vessel: litres of water, or kilograms of CO₂.
-  const A = co2 ? s.co2 : s.liters;
-  const layers = s.layers.map((l) => ({
-    ...l,
-    v: co2 ? l.kg : l.liters,
-    color: co2 ? smoke(l.color) : l.color,
-    text: co2 ? fmtCo2(l.kg) : fmtLiters(l.liters),
-  }));
+// Water: pick the vessel, set the level, and drip.
+function renderVessel(s, key, pouring) {
+  const A = s.liters;
   const L = A.mid;
-  const key = `${s.period}|${s.mode}|${s.method}|${s.emptiedAt}|${s.show}|${s.since}`;
+  const layers = s.layers.map((l) => ({ ...l, v: l.liters, text: fmtLiters(l.liters) }));
   let switched = false;
   let riseDelay = 0;
   if (!pouring || !cur.vessel) {
     const auto = !VESSELS[s.vessel];
-    const name = auto ? vesselFor(co2 ? L * CO2_L_PER_KG : L) : s.vessel; // a chosen vessel, or grow with the amount
+    const name = auto ? vesselFor(L) : s.vessel; // a chosen vessel, or grow with the amount
     if (name !== cur.vessel) {
       const from = cur.vessel;
       const grew =
@@ -1255,9 +1226,9 @@ function render(s) {
       if (grew) {
         cancelDrips();
         const nv = VESSELS[name];
-        const kk = scaleFor(L, co2)[1];
+        const kk = scaleFor(L)[1];
         const y = nv.bottom - (nv.bottom - nv.top) * Math.min((L * kk) / capacityFor(L * kk), 1);
-        riseDelay = levelUp(from, name, y, co2 ? '#b4bac3' : layers.length ? layers[0].color : '#8fd6ff');
+        riseDelay = levelUp(from, name, y, layers.length ? layers[0].color : '#8fd6ff');
       }
       setVessel(name);
       switched = true;
@@ -1265,7 +1236,7 @@ function render(s) {
     }
   }
   const v = VESSELS[cur.vessel];
-  const [unit, k] = scaleFor(L, co2);
+  const [unit, k] = scaleFor(L);
   if (!pouring || !cur.cap) {
     const cap = capacityFor(L * k);
     if (cap !== cur.cap || unit !== cur.unit) {
@@ -1287,7 +1258,7 @@ function render(s) {
   } else if (rose && leveling) {
     setLevel(levelY, layers, 0); // joins the pour already under way
   } else if (rose && !REDUCED_MOTION) {
-    const events = s.events && s.events.length ? s.events : Array.from({ length: Math.max(1, Math.min(MAX_QUEUED, s.tokens.req - (prevReq ?? s.tokens.req))) }, () => ({ fam: 'opus', sub: false }));
+    const events = newEvents(s);
     if (!dripTimer && !levelTimer) setLevel(levelY, layers, FORM_MS + fallMs(surfaceY - v.drip[1]));
     else setLevel(levelY, layers, 0);
     queueDrips(events);
@@ -1295,10 +1266,6 @@ function render(s) {
     if (pouring || switched) cancelDrips();
     setLevel(levelY, layers, 0);
   }
-
-  updateIce(s.lastAt);
-  setBoil(!co2 && iceLevel < 0.05 && !s.scanning ? clamp(((s.busy || 0) - 5) / 10, 0, 1) : 0);
-  renderShelf(s.shelf, co2);
 
   if (L > 0 && !pouring) {
     clearTimeout(fadeTimer);
@@ -1312,6 +1279,40 @@ function render(s) {
     }, 1300);
   }
 
+}
+
+// CO₂: draw the comparison, and send up a puff for each new response.
+function renderScene(s, key, pouring) {
+  if (pouring) return; // fading out; comes back at zero
+  const kg = s.co2.mid;
+  const q = s.equiv || EQUIV_DEFAULT;
+  const unit = co2Unit(kg, s.co2Unit, q);
+  const rose = !s.scanning && prevLiters !== null && key === prevKey && kg > prevLiters;
+  const grew = rose && sceneState.unit !== null && unit !== sceneState.unit && SCENE_LADDER.indexOf(unit) > SCENE_LADDER.indexOf(sceneState.unit);
+  if (unit !== sceneState.unit) cancelDrips();
+  showScene(unit, sceneCount(kg, unit, q), { lit: kg > 0, grew });
+  if (rose && !grew && !REDUCED_MOTION) queueDrips(newEvents(s));
+}
+
+function render(s) {
+  lastState = s;
+  if (prevEmptied !== undefined && s.emptiedAt && s.emptiedAt !== prevEmptied) pour();
+  prevEmptied = s.emptiedAt;
+  const pouring = Date.now() < pouringUntil;
+
+  const co2 = s.show === 'co2';
+  setLook(co2);
+  // Litres of water, or kilograms of CO₂.
+  const A = co2 ? s.co2 : s.liters;
+  const L = A.mid;
+  const key = `${s.period}|${s.mode}|${s.method}|${s.emptiedAt}|${s.show}|${s.since}`;
+  if (co2) renderScene(s, key, pouring);
+  else renderVessel(s, key, pouring);
+
+  updateIce(s.lastAt);
+  setBoil(!co2 && iceLevel < 0.05 && !s.scanning ? clamp(((s.busy || 0) - 5) / 10, 0, 1) : 0);
+  renderShelf(s.shelf, co2);
+
   if (s.scanning && L === 0) $('liters').textContent = '…';
   else if (co2) {
     const [n, u] = co2Parts(s.co2.mid);
@@ -1324,7 +1325,9 @@ function render(s) {
     $('caption').textContent =
       co2 && s.equiv ? (L > 0 ? `≈ ${co2Say(L, co2Unit(L, s.co2Unit, s.equiv), s.equiv)}` : 'empty') : caption(L, cur.vessel);
     const rate = co2 ? s.rateKg : s.rate;
-    $('period').innerHTML = `<span class="pt">${esc(s.periodText)}</span>` + (rate > 0 ? `<span class="rate">&nbsp;· ▲ ${co2 ? fmtRateKg(rate) : fmtRate(rate)}</span>` : '');
+    const q = s.equiv || EQUIV_DEFAULT;
+    const rateText = co2 ? co2RateSay(rate, co2Unit(L, s.co2Unit, q), q) : fmtRate(rate);
+    $('period').innerHTML = `<span class="pt">${esc(s.periodText)}</span>` + (rate > 0 ? `<span class="rate">&nbsp;· ▲ ${rateText}</span>` : '');
   }
   $('hint').textContent = s.hint && !s.scanning ? `⚠ ${fmtTokens(s.hint.tokens)} context · /compact?` : '';
   legend(s, co2);

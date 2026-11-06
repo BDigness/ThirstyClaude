@@ -598,7 +598,7 @@ function buildMenu() {
         ];
   return Menu.buildFromTemplate([
     { label: 'Show widget', type: 'checkbox', checked: win.isVisible(), click: toggleVisible },
-    { label: EMPTY_LABELS[vessel] || 'Empty', enabled: !scanning, click: empty },
+    { label: settings.show === 'co2' ? 'Clear the air' : EMPTY_LABELS[vessel] || 'Empty', enabled: !scanning, click: empty },
     { type: 'separator' },
     {
       label: 'Period',
@@ -610,7 +610,7 @@ function buildMenu() {
       })),
     },
     {
-      label: 'Fill with',
+      label: 'Show',
       submenu: [
         { label: 'Water', type: 'radio', checked: settings.show !== 'co2', click: () => set({ show: 'water' }) },
         { label: 'CO₂ (carbon emissions)', type: 'radio', checked: settings.show === 'co2', click: () => set({ show: 'co2' }) },
@@ -656,6 +656,7 @@ function buildMenu() {
     },
     {
       label: 'Vessel',
+      enabled: settings.show !== 'co2',
       submenu: VESSELS.map(([id, label], i) => [
         { label, type: 'radio', checked: settings.vessel === id, click: () => set({ vessel: id }) },
         ...(i === 0 ? [{ type: 'separator' }] : []),

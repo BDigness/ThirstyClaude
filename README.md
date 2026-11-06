@@ -2,12 +2,13 @@
 
 A small always-on-top desktop widget that fills with the estimated water behind
 your Claude Code (and Codex) token use. Each response drips in live. It can
-fill with the estimated CO₂ instead.
+show the estimated CO₂ instead, as something you can picture: a cigarette
+burning down, a car idling, a tire fire.
 
 <p>
   <img src="docs/today.png" alt="Graduated cylinder at 6.6 L under a dripping burette, filled in coloured layers by project (demo data)" width="150">
   <img src="docs/all-time.png" alt="Bathtub at 417 L with a rubber duck, and a shelf of seven daily jars below (demo data)" width="150">
-  <img src="docs/co2.png" alt="Swimming pool filling with grey smoke from an exhaust pipe: 55 kg CO₂e, about 1.8 tires burned (demo data)" width="150">
+  <img src="docs/co2.png" alt="A stack of tires on fire with black smoke: 55 kg CO₂e, about 1.8 tires burned, 0.011 tires an hour (demo data)" width="150">
   <img src="docs/legend.png" alt="Hover legend with range, energy, tokens, projects and drop colours (demo data)" width="150">
 </p>
 
@@ -94,32 +95,39 @@ Developed on Windows. macOS and Linux should work but haven't been tested.
   total. Today's jar is outlined.
 - **Every vessel has a source.** Drops come from a dropper, a kitchen tap, a
   burette, a garden spigot, a downspout, the bath tap, a hose or a rain cloud.
-- **CO₂ mode.** Choose *Fill with → CO₂* and the vessel fills with grey smoke
-  from an exhaust pipe. The amount is shown in grams or kilograms, and the
-  caption compares it to something you can picture. On *Automatic* it picks the
-  comparison that gives a readable number; *Count CO₂ in* can pin one.
+- **CO₂ mode.** Choose *Show → CO₂* and the vessel gives way to a picture of
+  what the CO₂ compares to. The amount is shown in grams or kilograms, the
+  caption counts it ("≈ 1.8 tires burned"), and the rate is in the same terms
+  ("▲ 0.011 tires/h"). On *Automatic* it picks the comparison that gives a
+  readable number, and moves up a step as the amount grows; *Count CO₂ in* can
+  pin one.
 
-  | Amount | Counted in |
-  |---|---|
-  | under 50 g | phone charges |
-  | under 1 kg | cigarettes |
-  | under 30 kg | minutes or hours of car idling |
-  | under 600 kg | tires burned |
-  | more | trees absorbing it for a year |
+  <img src="docs/co2-scenes.png" alt="The six CO₂ scenes: a phone charging from a small power plant, a cigarette burning in a glass ashtray, a car idling under a clock, a car driving with an odometer, a stack of tires on fire, and a forest in the sun (test data)" width="600">
 
-  Km driven is available too.
+  | Amount | Counted in | Picture |
+  |---|---|---|
+  | under 50 g | phone charges | A phone charging from a little power plant. The battery fills; full charges line up above. |
+  | under 1 kg | cigarettes | A cigarette burns down in a glass ashtray. Butts pile up, and every 20 become an empty pack. |
+  | under 30 kg | car idling | A car idling, puffing exhaust. The clock fills each hour; full hours line up above. |
+  | under 600 kg | tires burned | Tires stacked on a fire, under a column of black smoke. More tires, more stacks. |
+  | more | trees for a year | A forest soaking up CO₂ in the sun, with a sapling growing towards the next tree. |
+
+  Km driven is available too: a car on the road and an odometer. Each response
+  sends up a puff, tinted by model. When the widget is idle for a few hours the
+  fire goes out and the car switches off (z z z); the next response lights it
+  again. Drag the widget and the flames and smoke trail behind.
 - **⚠ Context hint.** Every reply re-reads the whole conversation, so a long
   session costs more per reply. When the active session's context passes 400K
   tokens, an amber line such as "⚠ 452K context · /compact?" appears. The
   legend shows what each reply costs at that size. The threshold can be changed
   or turned off in the menu.
 - **Drip sounds** (off by default): a soft plink for each drop, lower for bigger
-  vessels, and a puff in CO₂ mode. The sounds are generated in the app, so there
+  vessels, and a soft puff in CO₂ mode. The sounds are generated in the app, so there
   are no audio files.
 - **The faint band is the likely range.** Every estimate here is uncertain, so the
   band shows how low or high it could plausibly be.
 - **▲ L/h is the flow rate:** your usage over the last 10 minutes, scaled to an
-  hour.
+  hour. In CO₂ mode it's in the comparison on show, such as tires per hour.
 - **Hover over the numbers** for the full breakdown: range, energy, responses,
   tokens, projects, and the drop colours.
 
@@ -131,17 +139,17 @@ itself is for hovering). It remembers its position.
 
 | Option | What it does |
 |---|---|
-| Empty / Drain | Named for what's showing: "Empty test tube", "Empty cylinder", "Drain bathtub" or "Drain pool". Pours the water out, so you can measure one task ("since 3:42 PM"). Your real totals keep counting. `thirstyclaude --empty` does the same from a terminal. |
+| Empty / Drain | Named for what's showing: "Empty test tube", "Empty cylinder", "Drain bathtub" or "Drain pool" ("Clear the air" in CO₂ mode). Pours the water out, so you can measure one task ("since 3:42 PM"). Your real totals keep counting. `thirstyclaude --empty` does the same from a terminal. |
 | Period | This session, today, last 7 days, last 30 days, all time, or since emptied. *This session* follows the newest session that has replied in the last 10 minutes, so it starts from zero whenever you open a new one. If no session is active, it shows the last one that replied. |
-| Fill with | Water, or CO₂ (carbon emissions). |
-| Count CO₂ in | Automatic, phone charges, cigarettes, car idling, km driven, tires burned, or trees for a year. |
+| Show | Water, or CO₂ (carbon emissions). |
+| Count CO₂ in | Automatic, phone charges, cigarettes, car idling, km driven, tires burned, or trees for a year. The picture, caption and rate follow it. |
 | Estimate | ThirstyClaude or EcoLogits (see below). |
 | Water counted | Including power plants, or data-center cooling only. |
 | Include Codex | Count Codex sessions as well as Claude Code. |
 | Context hint | Over 200K, 400K (default) or 600K tokens, or off. |
 | Drip sounds | Off by default. |
 | Jar shelf | Off, last 7 days, or last 30 days. |
-| Vessel | Automatic (grows with the amount), or always one vessel: test tube, glass, cylinder, bucket, rain barrel, bathtub, hot tub or pool. |
+| Vessel | Water only. Automatic (grows with the amount), or always one vessel: test tube, glass, cylinder, bucket, rain barrel, bathtub, hot tub or pool. |
 | Size | Tiny, Small, Medium, Large, Extra large or Huge (60%–200%). |
 | Always on top | Keeps the widget above other windows. |
 | Start with Windows / Open at login | Starts the widget when you log in (Windows and macOS). |
@@ -281,7 +289,7 @@ Background reading:
 | `--period=today` | Starts on a period: `session`, `today`, `week`, `month` or `all`. |
 | `--vessel=tub` | Starts with a vessel: `auto`, `tube`, `glass`, `cylinder`, `bucket`, `barrel`, `tub`, `hottub` or `pool`. |
 | `--size=large` | Starts at a size: `tiny`, `small`, `medium`, `large`, `xl` or `huge`. |
-| `--show=co2` | Starts filled with `water` or `co2`. |
+| `--show=co2` | Starts showing `water` or `co2`. |
 | `--sounds` | Turns drip sounds on. |
 | `--co2unit=tire` | Counts CO₂ in: `auto`, `phone`, `cigarette`, `idle`, `km`, `tire` or `tree`. |
 | `--shelf=7` | Shows the jar shelf: `0`, `7` or `30` days. |
