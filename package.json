@@ -1,9 +1,9 @@
 {
   "name": "thirstyclaude",
   "productName": "ThirstyClaude",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "A desktop widget: a graduated cylinder that fills with the estimated water behind your Claude Code tokens",
+  "description": "A desktop widget that fills with the estimated water behind your Claude Code and Codex tokens",
   "main": "main.js",
   "bin": {
     "thirstyclaude": "bin/launch.js"
@@ -41,7 +41,8 @@
     "node": ">=18"
   },
   "dependencies": {
-    "electron": "33.4.11"
+    "electron": "33.4.11",
+    "fzstd": "0.1.1"
   },
   "license": "MIT"
 }

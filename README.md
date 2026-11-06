@@ -1,15 +1,19 @@
 # ThirstyClaude
 
-A small always-on-top desktop widget: a graduated cylinder that fills with the
-estimated water behind your Claude Code token use.
+A small always-on-top desktop widget that fills with the estimated water behind
+your Claude Code (and Codex) token use. Each response drips in live.
 
-<img src="docs/screenshot.png" alt="ThirstyClaude widget showing a cylinder filled to 508 L (demo data)" width="150">
+<p>
+  <img src="docs/today.png" alt="Graduated cylinder at 6.6 L, filled in coloured layers by project (demo data)" width="150">
+  <img src="docs/all-time.png" alt="Bathtub at 417 L, about 2.8 bathtubs (demo data)" width="150">
+  <img src="docs/legend.png" alt="Hover legend with range, energy, tokens, projects and drop colours (demo data)" width="150">
+</p>
 
-*Screenshot uses demo data.*
+*Screenshots use demo data.*
 
 ## Install
 
-Needs [Node.js](https://nodejs.org) 18 or later and Claude Code.
+Needs [Node.js](https://nodejs.org) 18 or later, plus Claude Code and/or Codex.
 
 ```bash
 npm install -g github:BDigness/ThirstyClaude
@@ -27,73 +31,130 @@ npm run dev
 
 Developed on Windows. macOS and Linux should work but haven't been tested.
 
-## Use
+## What you're looking at
 
-- Each Claude response adds one drop, within a fraction of a second of being
-  written to the log. Busy stretches look like a steady drip.
-- Drag the cylinder anywhere. It remembers its position.
-- **Empty cylinder** pours the water out so you can measure a single task. The
-  cylinder then shows only what you use from that moment ("since 3:42 PM"). Your
-  real totals keep counting, and Today, 30 days and All time are unaffected.
-  From a terminal, `thirstyclaude --empty` does the same, even while it's
-  already running.
-- Right-click it, or the tray icon, for options:
-  - period: today, last 7 days, last 30 days, all time, since emptied
-  - which water to count
-  - size
-  - always on top
-  - start at login (Windows and macOS)
-- Hover over the numbers for a breakdown: energy, requests and token types.
-- Click the tray icon to show or hide the cylinder.
+- **The vessel grows with the amount.** It goes from a test tube (under 1 L) to a
+  graduated cylinder (up to 200 L), then a bathtub, then a swimming pool. A
+  caption puts the amount in everyday terms (≈ glasses, buckets, bathtubs,
+  backyard pools).
+- **Layers are projects.** Your five biggest projects get a colour each, and the
+  rest go into "Other". A project keeps its colour over time.
+- **Drops are responses.** Each response drips in within about 0.1 seconds of
+  being written to the log. Drops are coloured by model, and smaller drops come
+  from subagents.
+
+  | Opus | Sonnet | Haiku | Fable | Codex |
+  |---|---|---|---|---|
+  | violet | red | green | magenta | amber |
+
+- **The faint band is the likely range.** Every estimate here is uncertain, so the
+  band shows how low or high it could plausibly be.
+- **▲ L/h is the flow rate:** your usage over the last 10 minutes, scaled to an
+  hour.
+- **Hover over the numbers** for the full breakdown: range, energy, responses,
+  tokens, projects, and the drop colours.
+
+## Menu
+
+Right-click the widget, or the tray icon. Click the tray icon to show or hide the
+widget. Drag the widget anywhere; it remembers its position.
+
+| Option | What it does |
+|---|---|
+| Empty cylinder | Pours the water out, so you can measure one task ("since 3:42 PM"). Your real totals keep counting. `thirstyclaude --empty` does the same from a terminal. |
+| Period | Today, last 7 days, last 30 days, all time, or since emptied. |
+| Estimate | ThirstyClaude or EcoLogits (see below). |
+| Water counted | Including power plants, or data-center cooling only. |
+| Include Codex | Count Codex sessions as well as Claude Code. |
+| Size, Always on top | Size and placement. |
+| Start with Windows / Open at login | Starts the widget when you log in (Windows and macOS). |
 
 ## Privacy
 
-- **Local only.** ThirstyClaude reads Claude Code's session logs on your computer:
-  `~/.claude/projects`, `~/.config/claude/projects`, or `$CLAUDE_CONFIG_DIR/projects`.
-  It only uses the token counts, timestamps and model names. It never reads your
+- **Local only.** ThirstyClaude reads session logs on your computer: Claude Code's
+  `~/.claude/projects` (or `$CLAUDE_CONFIG_DIR`) and Codex's `~/.codex/sessions`
+  (or `$CODEX_HOME`). From each response it uses only the token counts,
+  timestamp, model name, and the name of the project folder. It never reads your
   prompts or code.
 - **No network.** The app blocks every request that isn't a local file and turns
   off Chromium's background networking. There is no telemetry and there are no
-  updates. The only download is at install time, when npm fetches Electron.
+  updates. The only downloads happen at install time, when npm fetches Electron
+  and `fzstd`, a small decompressor for Codex's compressed logs.
 - **Your totals stay on your machine**, in the app's data folder:
   - Windows: `%APPDATA%\ThirstyClaude`
   - macOS: `~/Library/Application Support/ThirstyClaude`
   - Linux: `~/.config/ThirstyClaude`
 
   The app keeps a running total there, so the all-time figure doesn't drop when
-  Claude Code deletes old logs.
+  old logs are deleted.
 
 ## How the estimate works
 
-Anthropic doesn't publish energy or water figures per request, so this is an
-order-of-magnitude estimate built from public numbers.
+Neither Anthropic nor OpenAI publishes energy or water figures per request. So
+ThirstyClaude offers two independent estimates. They usually land within a
+factor of two of each other.
 
-1. **Tokens:** every API response in your logs is counted once. That includes
-   subagents and only Claude models.
-2. **Energy:** Wh per million tokens for Opus-class models. Other model families
-   are scaled: Sonnet ×0.5, Haiku ×0.1, Fable ×2.
+### ThirstyClaude estimate (default)
 
-   | Token type | Wh per 1M |
-   |---|---|
-   | Output | 800 |
-   | Cache writes | 200 |
-   | Input | 160 |
-   | Cache reads | 8 |
+Every token type counts, weighted by how much computing it takes. The table shows
+Wh per million tokens for Opus-class models.
 
-   A typical long-context Claude Code request works out to roughly 3–4 Wh.
-   Cache reads are most of your tokens but cost little, because nothing is
-   recomputed.
-3. **Water:** about **3 L per kWh** including water evaporated at power plants,
-   or about **0.5 L per kWh** for data-center cooling only. You can switch
-   between the two in the menu.
+| Token type | Wh per 1M |
+|---|---|
+| Output | 800 |
+| Cache writes | 200 |
+| Input | 160 |
+| Cache reads | 8 |
+
+Other model families are scaled from these values:
+
+| Family | Scale |
+|---|---|
+| Sonnet | ×0.5 |
+| Haiku | ×0.1 |
+| Fable | ×2 |
+| GPT large / standard / small | ×1.4 / ×0.7 / ×0.3 |
+
+A typical long-context Claude Code request works out to roughly 3–4 Wh. The likely
+range takes energy from half to double these values, combined with the
+water-factor range.
+
+### EcoLogits estimate
+
+This option follows [EcoLogits](https://ecologits.ai/latest/methodology/llm_inference/),
+the open methodology from GenAI Impact:
+
+- **Tokens:** only output tokens count.
+- **Energy:** scales with each model's estimated active parameters and the number
+  of GPUs needed to hold it, plus server overhead and data-center PUE.
+- **Water:** IT energy × (on-site WUE + PUE × the off-site water intensity of US
+  electricity).
+- **Inputs and range:** model sizes, PUE and WUE are EcoLogits' own published
+  estimates, and the range comes from their minimum and maximum values.
+
+### Water counted
+
+- **Including power plants** (default) adds the water evaporated to generate the
+  electricity. That's about 3 L per kWh in the ThirstyClaude estimate.
+- **Data-center cooling only** counts just the cooling water. That's about 0.5 L
+  per kWh.
 
 To use your own assumptions, edit the constants in [`model.js`](model.js).
 
 Background reading:
 
+- [EcoLogits: LLM inference methodology](https://ecologits.ai/latest/methodology/llm_inference/)
 - [Google's 0.26 mL per Gemini prompt (cooling only), and its critics](https://www.pcgamer.com/software/ai/theyre-just-hiding-the-critical-information-google-says-its-gemini-ai-sips-a-mere-five-drops-of-water-per-text-prompt-but-experts-disagree-with-its-findings)
 - [AI water usage, including power-plant water](https://greencalculus.com/data/ai-water-usage/)
 - [What AI water numbers actually measure](https://inzonex.co.uk/ai/reports/ai-data-center-water-evidence-2026)
+
+## Command-line options
+
+| Option | What it does |
+|---|---|
+| `--empty` | Empties the cylinder, even while the widget is already running. |
+| `--demo` | Shows made-up data, for trying it out or taking screenshots. |
+| `--period=today` | Starts on a period: `today`, `week`, `month` or `all`. |
 
 ## Uninstall
 

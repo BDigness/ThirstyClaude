@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { Worker } = require('worker_threads');
-const { liters, dayKey, addDays, totalsFor, L_PER_KWH } = require('./model');
+const { estimate, collect, snapshot: tareSnapshot, familyOf, dayKey, addDays, zero, addTok } = require('./model');
 
 // --empty        empties the cylinder (also works while ThirstyClaude is already running)
 // --demo         shows made-up numbers instead of reading your logs
@@ -12,12 +12,18 @@ const arg = (name) => process.argv.find((a) => a === `--${name}` || a.startsWith
 const DEMO = Boolean(arg('demo'));
 const EMPTY_ON_START = Boolean(arg('empty'));
 const SNAPSHOT = (arg('snapshot') || '').split('=').slice(1).join('=') || null;
+// --period=today|week|month|all   start on that period (handy with --demo)
+const PERIOD_ARG = (arg('period') || '').split('=')[1] || null;
 
 // Local-only app: keep Chromium's background networking off.
 app.commandLine.appendSwitch('disable-background-networking');
 app.commandLine.appendSwitch('disable-component-update');
 
-const BASE = { w: 150, h: 330 };
+const BASE = { w: 160, h: 334 };
+// Project layers and "Other" (validated categorical palette for the dark card).
+const LAYER_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181'];
+const OTHER_COLOR = '#6b7280';
+const RATE_WINDOW_MS = 10 * 60 * 1000;
 const SIZES = { small: 0.8, medium: 1, large: 1.3 };
 const PERIODS = [
   ['today', 'Today'],
@@ -34,6 +40,9 @@ const DEFAULTS = {
   visible: true,
   x: null,
   y: null,
+  method: 'tc', // 'tc' = ThirstyClaude estimate, 'eco' = EcoLogits
+  includeCodex: true,
+  colors: {}, // project name -> layer colour slot, so colours follow the project
   tare: null, // all-time totals at the moment the cylinder was last emptied
   emptiedAt: null,
 };
@@ -48,12 +57,13 @@ let scanning = true;
 let progress = { done: 0, total: 0 };
 let quitting = false;
 let pendingEmpty = EMPTY_ON_START;
+let recent = []; // responses from the last hour, for the flow rate
 
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 const stateFile = () => path.join(app.getPath('userData'), 'state.json');
 
-// Where Claude Code keeps its session logs.
-function logRoots() {
+// Where Claude Code and Codex keep their session logs.
+function claudeRoots() {
   const roots = [path.join(os.homedir(), '.claude', 'projects'), path.join(os.homedir(), '.config', 'claude', 'projects')];
   for (const dir of (process.env.CLAUDE_CONFIG_DIR || '').split(',')) {
     if (dir.trim()) roots.push(path.join(dir.trim(), 'projects'));
@@ -61,12 +71,29 @@ function logRoots() {
   return [...new Set(roots)];
 }
 
+function codexRoots() {
+  const homes = [path.join(os.homedir(), '.codex')];
+  if (process.env.CODEX_HOME) homes.unshift(process.env.CODEX_HOME);
+  const roots = [];
+  for (const h of homes) roots.push(path.join(h, 'sessions'), path.join(h, 'archived_sessions'));
+  return [...new Set(roots)];
+}
+
 function loadSettings() {
+  let s;
   try {
-    return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) };
+    s = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) };
   } catch {
-    return { ...DEFAULTS };
+    s = { ...DEFAULTS };
   }
+  if (s.tare && s.tare.v !== 2) {
+    // Snapshot from an older version: it can't be subtracted from the new totals.
+    s.tare = null;
+    s.emptiedAt = null;
+    if (s.period === 'since') s.period = 'all';
+  }
+  s.colors = s.colors || {};
+  return s;
 }
 
 function saveSettings() {
@@ -84,9 +111,55 @@ function set(patch) {
 }
 
 // ── Totals ──────────────────────────────────────────────────────────────────
-function totals(period = settings.period) {
-  const t = totalsFor(days, period, settings.tare);
-  return { ...t, tokens: t.in + t.out + t.cw + t.cr, liters: liters(t.wh, settings.mode) };
+// Everything the widget shows for the current period, method and water mode.
+function view(period = settings.period) {
+  const c = collect(days, { period, tare: settings.tare && settings.tare.data, codex: settings.includeCodex });
+  const est = estimate(c.total, settings.method, settings.mode);
+  const projects = Object.keys(c.projects)
+    .map((name) => ({ name, liters: estimate(c.projects[name], settings.method, settings.mode).l.mid }))
+    .filter((p) => p.liters > 0)
+    .sort((a, b) => b.liters - a.liters);
+  const top = projects.slice(0, LAYER_COLORS.length);
+  const rest = projects.slice(LAYER_COLORS.length);
+
+  // Colour follows the project: keep its slot unless a larger project already holds it.
+  // While the logs are still loading the ranking keeps shifting, so nothing is kept yet.
+  const keep = !scanning;
+  const used = new Set();
+  let assigned = false;
+  for (const p of top) {
+    const slot = keep ? settings.colors[p.name] : null;
+    if (slot != null && slot < LAYER_COLORS.length && !used.has(slot)) {
+      p.slot = slot;
+      used.add(slot);
+    }
+  }
+  for (const p of top) {
+    if (p.slot != null) continue;
+    let slot = 0;
+    while (used.has(slot)) slot++;
+    p.slot = slot;
+    used.add(slot);
+    if (keep) {
+      settings.colors[p.name] = slot;
+      assigned = true;
+    }
+  }
+  if (assigned) saveSettings();
+  const layers = top.map((p) => ({ name: p.name, liters: p.liters, color: LAYER_COLORS[p.slot] }));
+  if (rest.length) {
+    layers.push({ name: `Other (${rest.length})`, liters: rest.reduce((s, p) => s + p.liters, 0), color: OTHER_COLOR, other: true });
+  }
+
+  // Flow rate: the last 10 minutes, scaled to an hour.
+  const cutoff = Date.now() - RATE_WINDOW_MS;
+  const fresh = {};
+  for (const r of recent) {
+    if (r.t < cutoff || (!settings.includeCodex && r.src === 'codex')) continue;
+    addTok(fresh[r.fam] || (fresh[r.fam] = zero()), { ...r.tok, req: 1 });
+  }
+  const rate = estimate(fresh, settings.method, settings.mode).l.mid * (3600000 / RATE_WINDOW_MS);
+  return { est, layers, rate };
 }
 
 // Empties the cylinder: the view restarts from zero, the real totals keep counting.
@@ -96,7 +169,7 @@ function empty() {
     return;
   }
   pendingEmpty = false;
-  set({ tare: totalsFor(days, 'all', null), emptiedAt: Date.now(), period: 'since' });
+  set({ tare: { v: 2, data: tareSnapshot(days) }, emptiedAt: Date.now(), period: 'since' });
 }
 
 function sinceText(ts) {
@@ -120,41 +193,79 @@ function fmtLiters(l) {
   return `${Math.round(l).toLocaleString('en-US')} L`;
 }
 
-function push() {
-  const t = totals();
+function push(events = []) {
+  const { est, layers, rate } = view();
   const { label, text } = periodLabels();
-  if (tray) tray.setToolTip(`ThirstyClaude: ${fmtLiters(t.liters)} (${text})`);
+  if (tray) tray.setToolTip(`ThirstyClaude: ${fmtLiters(est.l.mid)} (${text})`);
   if (win && !win.isDestroyed()) {
     win.webContents.send('update', {
-      totals: t,
+      liters: est.l,
+      kwh: { lo: est.wh.lo / 1000, mid: est.wh.mid / 1000, hi: est.wh.hi / 1000 },
+      tokens: est.tokens,
+      layers,
+      rate,
       period: settings.period,
       periodLabel: label,
       periodText: text,
       emptiedAt: settings.emptiedAt,
       mode: settings.mode,
-      lPerKwh: L_PER_KWH[settings.mode],
+      method: settings.method,
       scanning,
       progress,
+      events: events.filter((e) => settings.includeCodex || e.src !== 'codex'),
     });
   }
 }
 
-// Made-up history for --demo (used for the README screenshot).
+// ── Demo (made-up projects and usage, used for the README screenshot) ───────
+const DEMO_PROJECTS = [
+  ['web-app', 1],
+  ['api', 0.6],
+  ['ml-pipeline', 0.4],
+  ['docs', 0.22],
+  ['scripts', 0.12],
+  ['infra', 0.07],
+  ['blog', 0.05],
+];
+const DEMO_MIX = [
+  ['claude', 'claude-opus-5-5', 0.62],
+  ['claude', 'claude-sonnet-5-5', 0.22],
+  ['claude', 'claude-haiku-5-5', 0.08],
+  ['codex', 'gpt-5.4', 0.08],
+];
+
+// Tokens that come to about `wh` Wh for an Opus-class model.
+function demoTokens(wh) {
+  return { in: Math.round(wh * 40), out: Math.round(wh * 180), cw: Math.round(wh * 1300), cr: Math.round(wh * 80000), req: Math.max(1, Math.round(wh / 3.6)) };
+}
+
+function demoAdd(t, src, project, model, tok) {
+  const k = dayKey(t);
+  const day = days[k] || (days[k] = {});
+  const sp = `${src}|${project}`;
+  const byFam = day[sp] || (day[sp] = {});
+  addTok(byFam[familyOf(model)] || (byFam[familyOf(model)] = zero()), tok);
+}
+
 function demoDays() {
-  const out = {};
+  days = {};
   const now = new Date();
   for (let i = 0; i < 45; i++) {
-    const wh = 2500 + 2000 * Math.abs(Math.sin(i * 1.7));
-    out[dayKey(addDays(now, -i))] = {
-      in: 9000,
-      out: Math.round(wh * 180),
-      cw: Math.round(wh * 1300),
-      cr: Math.round(wh * 80000),
-      req: Math.round(wh / 3.8),
-      wh,
-    };
+    const dayWh = 2500 + 2000 * Math.abs(Math.sin(i * 1.7));
+    for (const [project, weight] of DEMO_PROJECTS) {
+      for (const [src, model, share] of DEMO_MIX) {
+        const wh = (dayWh * weight * share) / 2.5;
+        if (wh > 1) demoAdd(addDays(now, -i), src, project, model, demoTokens(wh));
+      }
+    }
   }
-  return out;
+  return days;
+}
+
+function pick(items) {
+  let r = Math.random() * items.reduce((s, x) => s + x[x.length - 1], 0);
+  for (const x of items) if ((r -= x[x.length - 1]) <= 0) return x;
+  return items[0];
 }
 
 // ── Window ──────────────────────────────────────────────────────────────────
@@ -203,6 +314,7 @@ function createWindow() {
     },
   });
   if (settings.alwaysOnTop) win.setAlwaysOnTop(true, 'floating');
+  if (SNAPSHOT) win.setIgnoreMouseEvents(true); // a hovering mouse would open the legend
   win.loadFile(path.join(__dirname, 'index.html'));
   win.once('ready-to-show', () => {
     if (settings.visible || SNAPSHOT) win.showInactive();
@@ -277,12 +389,20 @@ function buildMenu() {
       })),
     },
     {
-      label: 'Water counted',
+      label: 'Estimate',
       submenu: [
-        { label: 'Including power plants (~3 L/kWh)', type: 'radio', checked: settings.mode === 'allIn', click: () => set({ mode: 'allIn' }) },
-        { label: 'Data-center cooling only (~0.5 L/kWh)', type: 'radio', checked: settings.mode === 'cooling', click: () => set({ mode: 'cooling' }) },
+        { label: 'ThirstyClaude (all token types)', type: 'radio', checked: settings.method === 'tc', click: () => set({ method: 'tc' }) },
+        { label: 'EcoLogits (output tokens)', type: 'radio', checked: settings.method === 'eco', click: () => set({ method: 'eco' }) },
       ],
     },
+    {
+      label: 'Water counted',
+      submenu: [
+        { label: 'Including power plants', type: 'radio', checked: settings.mode === 'allIn', click: () => set({ mode: 'allIn' }) },
+        { label: 'Data-center cooling only', type: 'radio', checked: settings.mode === 'cooling', click: () => set({ mode: 'cooling' }) },
+      ],
+    },
+    { label: 'Include Codex', type: 'checkbox', checked: settings.includeCodex, click: (item) => set({ includeCodex: item.checked }) },
     {
       label: 'Size',
       submenu: Object.keys(SIZES).map((s) => ({
@@ -332,15 +452,16 @@ function trayIcon() {
 // ── Log scanner ─────────────────────────────────────────────────────────────
 function startWorker() {
   worker = new Worker(path.join(__dirname, 'scanner.js'), {
-    workerData: { roots: logRoots(), stateFile: stateFile() },
+    workerData: { claudeRoots: claudeRoots(), codexRoots: codexRoots(), stateFile: stateFile() },
   });
   worker.on('message', (m) => {
     if (m.type === 'days') {
       days = m.days;
+      recent = m.recent || recent;
       if (m.progress) progress = m.progress;
       const finished = scanning && !m.scanning;
       scanning = m.scanning;
-      push();
+      push(m.events || []);
       if (finished && pendingEmpty) empty();
       if (finished && SNAPSHOT) setTimeout(snapshot, EMPTY_ON_START ? 7000 : 2500);
     } else if (m.type === 'flushed' && quitting) {
@@ -350,31 +471,43 @@ function startWorker() {
   worker.on('error', (e) => console.error('scanner error:', e));
 }
 
+function demoResponse(t) {
+  const [project] = pick(DEMO_PROJECTS);
+  const [src, model] = pick(DEMO_MIX);
+  const tok = demoTokens(2 + Math.random() * 5);
+  tok.req = 1;
+  demoAdd(t, src, project, model, tok);
+  recent.push({ t: t.getTime(), src, project, fam: familyOf(model), tok });
+  return { src, fam: familyOf(model), sub: Math.random() < 0.3 };
+}
+
 function startDemo() {
-  days = demoDays();
+  demoDays();
+  for (let i = 0; i < 40; i++) demoResponse(new Date(Date.now() - Math.random() * RATE_WINDOW_MS));
   scanning = false;
   progress = { done: 1, total: 1 };
   push();
   if (pendingEmpty) empty();
-  // A little made-up usage every few seconds, so the drip and refill can be seen.
+  // Made-up responses every couple of seconds, so the drips and refill can be seen.
   setInterval(() => {
-    const k = dayKey(new Date());
-    const d = days[k] || (days[k] = { in: 0, out: 0, cw: 0, cr: 0, req: 0, wh: 0 });
-    const wh = 3 + Math.random() * 6;
-    d.wh += wh;
-    d.req += 1;
-    d.out += Math.round(wh * 180);
-    d.cw += Math.round(wh * 1300);
-    d.cr += Math.round(wh * 80000);
-    push();
-  }, 3000);
+    const n = 1 + Math.floor(Math.random() * 3);
+    const events = [];
+    for (let i = 0; i < n; i++) events.push(demoResponse(new Date()));
+    push(events);
+  }, 2500);
   if (SNAPSHOT) setTimeout(snapshot, EMPTY_ON_START ? 7000 : 2500);
 }
 
 async function snapshot() {
+  if (arg('legend')) {
+    await win.webContents.executeJavaScript("document.getElementById('card').classList.add('show-legend')");
+    await new Promise((r) => setTimeout(r, 300));
+  }
   const img = await win.webContents.capturePage();
   fs.writeFileSync(SNAPSHOT, img.toPNG());
-  fs.writeFileSync(SNAPSHOT.replace(/\.png$/i, '') + '.json', JSON.stringify({ allTime: totals('all'), days: Object.keys(days).length }, null, 2));
+  const all = view('all');
+  const summary = { allTime: { liters: all.est.l, kwh: all.est.wh.mid / 1000, tokens: all.est.tokens }, layers: all.layers, rate: all.rate, days: Object.keys(days).length };
+  fs.writeFileSync(SNAPSHOT.replace(/\.png$/i, '') + '.json', JSON.stringify(summary, null, 2));
   quit();
 }
 
@@ -403,7 +536,8 @@ if (!SNAPSHOT && !DEMO && !app.requestSingleInstanceLock()) {
     session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
     if (process.platform === 'darwin' && app.dock) app.dock.hide();
 
-    settings = loadSettings();
+    settings = DEMO ? { ...DEFAULTS, colors: {} } : loadSettings();
+    if (PERIOD_ARG && PERIODS.some(([id]) => id === PERIOD_ARG && id !== 'since')) settings.period = PERIOD_ARG;
     createWindow();
     if (!SNAPSHOT) {
       tray = new Tray(trayIcon());
@@ -413,7 +547,7 @@ if (!SNAPSHOT && !DEMO && !app.requestSingleInstanceLock()) {
     ipcMain.on('menu', () => buildMenu().popup({ window: win }));
     if (DEMO) startDemo();
     else startWorker();
-    setInterval(push, 60000); // keeps "Today" correct across midnight
+    setInterval(() => push(), 20000); // keeps the flow rate and "Today" current
   });
   app.on('window-all-closed', (e) => e.preventDefault());
 }

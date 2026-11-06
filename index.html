@@ -8,6 +8,8 @@
   :root {
     --text: #eaf1fb;
     --muted: rgba(234, 241, 251, 0.62);
+    --faint: rgba(234, 241, 251, 0.45);
+    --accent: #7cc4ff;
     --card: rgba(14, 18, 26, 0.66);
     --edge: rgba(255, 255, 255, 0.09);
     --glass: rgba(214, 230, 255, 0.55);
@@ -32,68 +34,105 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 6px 0 10px;
+    padding: 6px 0 9px;
     box-sizing: border-box;
   }
-  svg { display: block; width: 138px; height: 236px; overflow: visible; }
-  .info { -webkit-app-region: no-drag; text-align: center; margin-top: 2px; cursor: default; }
-  #liters { font-size: 21px; font-weight: 600; letter-spacing: 0.2px; font-variant-numeric: tabular-nums; }
-  #sub { font-size: 10.5px; color: var(--muted); margin-top: 1px; white-space: nowrap; }
+  svg { display: block; width: 138px; height: 236px; overflow: visible; flex: none; }
+  .info { -webkit-app-region: no-drag; text-align: center; margin-top: 2px; cursor: default; width: 100%; }
+  #liters { font-size: 21px; font-weight: 600; letter-spacing: 0.2px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  #caption, #period { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; }
+  #period { color: var(--faint); font-size: 10px; }
+  #period .rate { color: var(--accent); }
+
   .tick { stroke: rgba(230, 240, 255, 0.7); stroke-width: 1; }
   .label { fill: rgba(234, 241, 251, 0.72); font-size: 8.5px; font-variant-numeric: tabular-nums; }
+  .glass { fill: none; stroke: var(--glass); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+  .solid { fill: var(--glass-fill); stroke: var(--glass); stroke-width: 1; stroke-linejoin: round; }
+
   #water { transition: transform 1.4s cubic-bezier(.2, .8, .2, 1), opacity .4s; }
-  .wave { animation: drift 3.4s linear infinite; }
-  .wave.back { animation-duration: 5.5s; animation-direction: reverse; opacity: 0.55; }
+  #bands rect { transition: y 1.4s cubic-bezier(.2, .8, .2, 1), height 1.4s cubic-bezier(.2, .8, .2, 1), fill .6s; }
+  #range rect { transition: y 1.4s cubic-bezier(.2, .8, .2, 1), height 1.4s cubic-bezier(.2, .8, .2, 1), opacity .4s; }
+  .instant, .instant * { transition: none !important; }
+  .wave { animation: drift 3.4s linear infinite; transition: fill .6s; }
+  .wave.back { animation-duration: 5.5s; animation-direction: reverse; opacity: 0.5; }
   @keyframes drift { from { transform: translateX(0); } to { transform: translateX(-24px); } }
   .ripple { transform-box: fill-box; transform-origin: center; }
   #rig { transform-box: view-box; transform-origin: 79px 228px; }
   @media (prefers-reduced-motion: reduce) {
     .wave { animation: none; }
-    #water { transition: none; }
+    #water, #bands rect, #range rect { transition: none; }
   }
+
+  .legend {
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    padding: 10px 10px;
+    border-radius: 16px;
+    background: rgba(12, 15, 22, 0.96);
+    font-size: 9.5px;
+    line-height: 1.38;
+    color: var(--muted);
+    opacity: 0;
+    transition: opacity .15s;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .card.show-legend .legend { opacity: 1; }
+  .lg-head { color: var(--faint); text-transform: uppercase; letter-spacing: .6px; font-size: 8.5px; }
+  .lg-big { color: var(--text); font-size: 14px; font-weight: 600; margin-top: 1px; font-variant-numeric: tabular-nums; }
+  .lg-sec { color: var(--faint); text-transform: uppercase; letter-spacing: .6px; font-size: 8.5px; margin-top: 6px; }
+  .lg-item { display: flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
+  .lg-item i { width: 7px; height: 7px; border-radius: 2px; flex: none; }
+  .lg-item .nm { flex: 1; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lg-drops { display: flex; flex-wrap: wrap; gap: 0 7px; }
+  .lg-drops b { font-weight: 400; margin-right: 2px; }
+  .lg-foot { color: var(--faint); margin-top: 6px; font-size: 8.5px; }
 </style>
 </head>
 <body>
-<div class="card">
+<div class="card" id="card">
   <svg viewBox="0 0 138 236" aria-hidden="true">
     <defs>
-      <linearGradient id="waterGrad" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#5cc0ff" stop-opacity="0.92"/>
-        <stop offset="1" stop-color="#1d63d6" stop-opacity="0.95"/>
-      </linearGradient>
+      <clipPath id="vclip"><path id="vclipPath"/></clipPath>
       <linearGradient id="glassGrad" x1="0" y1="0" x2="1" y2="0">
         <stop offset="0" stop-color="#fff" stop-opacity="0.10"/>
         <stop offset="0.5" stop-color="#fff" stop-opacity="0.02"/>
         <stop offset="1" stop-color="#fff" stop-opacity="0.08"/>
       </linearGradient>
-      <clipPath id="tube"><rect x="58.5" y="12" width="41" height="196" rx="2"/></clipPath>
+      <linearGradient id="depth" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fff" stop-opacity="0.16"/>
+        <stop offset="0.18" stop-color="#fff" stop-opacity="0"/>
+        <stop offset="1" stop-color="#000" stop-opacity="0.3"/>
+      </linearGradient>
     </defs>
-
     <g id="rig">
-    <rect x="58" y="12" width="42" height="197" fill="url(#glassGrad)"/>
-    <g clip-path="url(#tube)">
-      <g id="water" style="transform: translateY(206px); opacity: 0">
-        <path id="waveBack" class="wave back" fill="#86d3ff"/>
-        <rect x="20" y="1.5" width="130" height="240" fill="url(#waterGrad)"/>
-        <path id="waveFront" class="wave" fill="#5cc0ff" fill-opacity="0.92"/>
+      <g id="behind"></g>
+      <g clip-path="url(#vclip)">
+        <g id="water" style="transform: translateY(206px); opacity: 0">
+          <path id="waveBack" class="wave back"/>
+          <g id="bands"></g>
+          <rect x="-10" y="0" width="160" height="240" fill="url(#depth)"/>
+          <path id="waveFront" class="wave"/>
+        </g>
+        <g id="range">
+          <rect id="rangeFill" x="-10" width="160" fill="#fff" fill-opacity="0.07"/>
+          <rect id="rangeHi" x="-10" width="160" height="0.8" fill="#e6f0ff" fill-opacity="0.5"/>
+          <rect id="rangeLo" x="-10" width="160" height="0.8" fill="#e6f0ff" fill-opacity="0.5"/>
+        </g>
       </g>
-    </g>
-    <g id="ticks"></g>
-
-    <path d="M51 9 Q56 10 57 15 L57 206 Q57 209 60 209 L98 209 Q101 209 101 206 L101 15 Q101 11 105 9"
-          fill="none" stroke="var(--glass)" stroke-width="1.5" stroke-linejoin="round"/>
-    <ellipse cx="78" cy="9.5" rx="27" ry="2.4" fill="none" stroke="var(--glass)" stroke-width="1.1"/>
-    <rect x="94" y="22" width="2.2" height="170" rx="1.1" fill="#fff" opacity="0.13"/>
-    <rect x="60" y="209" width="38" height="9" fill="var(--glass-fill)" stroke="var(--glass)" stroke-width="1"/>
-    <path d="M40 218 H118 L127 231 H31 Z" fill="var(--glass-fill)" stroke="var(--glass)" stroke-width="1.1" stroke-linejoin="round"/>
-    <g id="drops"></g>
+      <g id="ticks"></g>
+      <g id="front"></g>
+      <g id="drops"></g>
     </g>
     <g id="spill"></g>
   </svg>
   <div class="info" id="info">
     <div id="liters">…</div>
-    <div id="sub">reading logs</div>
+    <div id="caption">reading logs</div>
+    <div id="period"></div>
   </div>
+  <div class="legend" id="legend"></div>
 </div>
 <script src="renderer.js"></script>
 </body>
