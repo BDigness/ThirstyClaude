@@ -201,11 +201,22 @@
   @keyframes scRoad { to { stroke-dashoffset: 16; } }
   .sc-speed path { stroke: rgba(234, 241, 251, .45); stroke-width: 1; stroke-linecap: round; animation: scSpeed .6s linear infinite; }
   @keyframes scSpeed { from { transform: translateX(6px); opacity: 0; } 30% { opacity: 1; } to { transform: translateX(-14px); opacity: 0; } }
-  .dk-x { display: none; }
+  .dk-x, .dk-cig { display: none; }
+  .sc-smoking .dk-cig { display: inline; }
+  .dk-flap { transform-box: fill-box; transform-origin: 95% 90%; animation: dkFlap .15s ease-in-out infinite alternate; }
+  @keyframes dkFlap { from { transform: rotate(18deg); } to { transform: rotate(-58deg); } }
   .sc-ko .dk-x { display: inline; }
   .sc-ko .dk-eye { display: none; }
   .sc-duck { transform-box: fill-box; transform-origin: 50% 100%; animation: scDuck 2.8s ease-in-out infinite alternate; }
   @keyframes scDuck { from { transform: rotate(-3deg); } to { transform: rotate(3deg); } }
+  /* Teetering on a perch, buffeted on the hood, tumbling in the updraft */
+  .sc-teeter { transform-box: fill-box; transform-origin: 50% 100%; animation: scTeeter 1.7s ease-in-out infinite alternate; }
+  @keyframes scTeeter { 0% { transform: rotate(-8deg); } 45% { transform: rotate(3deg); } 100% { transform: rotate(9deg); } }
+  .sc-wind { transform-box: fill-box; transform-origin: 30% 100%; animation: scWind .32s ease-in-out infinite alternate; }
+  @keyframes scWind { from { transform: rotate(-4deg); } to { transform: rotate(-11deg) translateX(-.4px); } }
+  .sc-float { transform-box: fill-box; transform-origin: center; animation: scFloat 1.3s ease-in-out infinite alternate; }
+  @keyframes scFloat { 0% { transform: translate(-3px, 4px) rotate(-10deg); } 50% { transform: translate(1px, -1px) rotate(4deg); } 100% { transform: translate(3px, -5px) rotate(12deg); } }
+  .sc-floater { transition: transform 1.4s cubic-bezier(.2,.8,.2,1); }
   .sc-crown { transform-box: fill-box; transform-origin: 50% 100%; animation: scSway 5.5s ease-in-out infinite alternate; }
   @keyframes scSway { from { transform: rotate(-2deg); } to { transform: rotate(2deg); } }
   .sc-off .sc-spokes, .sc-off .sc-body, .sc-off .sc-road, .sc-off .sc-roll { animation: none; }

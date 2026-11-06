@@ -8,7 +8,7 @@ burning down, a car idling, a tire fire.
 <p>
   <img src="docs/today.png" alt="Graduated cylinder at 6.6 L under a dripping burette, filled in coloured layers by project (demo data)" width="150">
   <img src="docs/all-time.png" alt="Bathtub at 417 L with a rubber duck, and a shelf of seven daily jars below (demo data)" width="150">
-  <img src="docs/co2.png" alt="A stack of tires on fire with black smoke, and the rubber duck watching in a gas mask: 55 kg CO₂e, about 1.8 tires burned, 0.011 tires an hour (demo data)" width="150">
+  <img src="docs/co2.png" alt="A stack of tires on fire with black smoke, and the rubber duck flapping in the updraft above it: 55 kg CO₂e, about 1.8 tires burned, 0.011 tires an hour (demo data)" width="150">
   <img src="docs/legend.png" alt="Hover legend with range, energy, tokens, projects and drop colours (demo data)" width="150">
 </p>
 
@@ -113,9 +113,11 @@ Developed on Windows. macOS and Linux should work but haven't been tested.
   | more | trees for a year | A forest soaking up CO₂ in the sun, with a sapling growing towards the next tree. |
 
   Km driven is available too: a car on the road and an odometer. The rubber
-  duck comes along: in a gas mask by the phone's power plant, the ashtray and
-  the tire fire, and bare-faced behind the wheel and in the trees. Each
-  response sends up a puff, tinted by model, and the duck hops. When the widget is idle for a few hours the
+  duck comes along, never anywhere sensible: perched on the power plant's
+  smokestack, sitting on the end of the cigarette, behind the wheel of the
+  idling car, surfing the hood of the moving one, flapping in the updraft
+  over the tire fire, and stuck on top of a tree. Each response sends up a
+  puff, tinted by model, and the duck hops. When the widget is idle for a few hours the
   fire goes out and the car switches off (z z z); the next response lights it
   again. Drag the widget and the flames and smoke trail behind.
 - **⚠ Context hint.** Every reply re-reads the whole conversation, so a long

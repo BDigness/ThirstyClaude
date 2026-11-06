@@ -101,35 +101,37 @@ function badge(g, text, x, y, anchor = 'start') {
 }
 
 // ── Shared pieces ───────────────────────────────────────────────────────────
-// The rubber duck comes along: the bath duck, facing right. Near the smoke it
-// wears a gas mask (lens, face piece, filter canister and straps); in the car
-// and in the trees it doesn't need one.
+// The rubber duck comes along (the bath duck, facing right), always somewhere
+// it shouldn't be: on a smokestack, a cigarette, a car roof, up a tree…
 const DUCK_BODY = `
     <path d="M-5.6 -1.8 L-8.4 -4.6 L-6.6 -0.4 Z" fill="#f6c445"/>
     <ellipse cx="0" cy="-1.3" rx="6.2" ry="3.5" fill="#f6c445"/>
     <path d="M-2.8 -2.3 Q0 -4.2 2.4 -2.2" fill="none" stroke="#d29a22" stroke-width="0.7" stroke-linecap="round"/>
     <circle cx="3.7" cy="-6" r="2.7" fill="#f6c445"/>`;
-// Each eye has an X version, shown when the duck is knocked out (see .sc-ko).
+// Each eye has an X version, shown when the duck is knocked out (see .sc-ko),
+// and there's a cigarette for when it's smoking (.sc-smoking).
 const DUCK_FACE = `
     <path d="M6 -6.4 L8.7 -5.6 L6 -4.7 Z" fill="#f08a24"/>
     <circle class="dk-eye" cx="4.5" cy="-6.6" r="0.5" fill="#1b1f27"/>
-    <path class="dk-x" d="M3.5 -7.6 L5.5 -5.6 M5.5 -7.6 L3.5 -5.6" stroke="#1b1f27" stroke-width="0.7" stroke-linecap="round"/>`;
-const DUCK_MASK = `
-    <path d="M1.1 -7.6 Q3.4 -9.5 5.6 -8.1 M1.1 -5.2 L4.2 -4.4" fill="none" stroke="#2b2f36" stroke-width="0.7" stroke-linecap="round"/>
-    <path d="M4.1 -8.3 Q7.5 -8.7 7.7 -5.7 Q7.7 -3.4 5.3 -3.5 Q3.6 -3.7 3.7 -5.8 Z" fill="#3d434c"/>
-    <circle cx="5.4" cy="-6.6" r="1.35" fill="#bfe3ff" fill-opacity="0.9" stroke="#1b1f27" stroke-width="0.35"/>
-    <circle class="dk-eye" cx="5.4" cy="-6.6" r="0.42" fill="#1b1f27"/>
-    <path class="dk-x" d="M4.6 -7.4 L6.2 -5.8 M6.2 -7.4 L4.6 -5.8" stroke="#1b1f27" stroke-width="0.55" stroke-linecap="round"/>
-    <circle cx="8.4" cy="-4.4" r="1.5" fill="#6b717a" stroke="#2b2f36" stroke-width="0.4"/>
-    <path d="M7.7 -4.9 H9.1 M7.6 -3.9 H9.2" stroke="#2b2f36" stroke-width="0.3"/>`;
-// Its base sits at x y; k is the size (1 = the bath duck), flip faces it left.
-function duck(x, y, k, { flip = false, bob = true, mask = true } = {}) {
-  const art = `<g transform="translate(0 -2.2)">${DUCK_BODY}${mask ? DUCK_MASK : DUCK_FACE}</g>`;
-  return `<g transform="translate(${x} ${y}) scale(${flip ? -k : k} ${k})"><g class="sc-hop"><g class="${bob ? 'sc-duck' : ''}">${art}</g></g></g>`;
+    <path class="dk-x" d="M3.5 -7.6 L5.5 -5.6 M5.5 -7.6 L3.5 -5.6" stroke="#1b1f27" stroke-width="0.7" stroke-linecap="round"/>
+    <g class="dk-cig">
+      <rect x="7.6" y="-5.75" width="3.4" height="0.9" fill="#eceff3"/>
+      <rect x="7.6" y="-5.75" width="1.1" height="0.9" fill="#d39a54"/>
+      <rect x="10.9" y="-5.75" width="0.55" height="0.9" fill="#ff6a2b"/>
+      <g transform="translate(11.3 -5.6)">${loops(4, 2.2, '<circle r="0.9" fill="url(#scPuff)"/>', (i) => `--dx:${0.6 + (i % 2) * 0.8}px;--dy:-6px;--grow:2.6;--op:.9;--s0:.6`)}</g>
+    </g>`;
+// A wing that flaps, for when the duck is airborne.
+const DUCK_WING = `<path class="dk-flap" d="M-1 -2.6 Q-3 -8 -7.5 -9.2 Q-6 -5 -4.2 -2.2 Z" fill="#eab52c"/>`;
+// Its base sits at x y; k is the size (1 = the bath duck); tilt in degrees;
+// flip faces it left; anim is how it wobbles (sc-teeter, sc-wind, sc-float).
+function duck(x, y, k, { flip = false, tilt = 0, anim = 'sc-teeter', flap = false } = {}) {
+  const art = `<g transform="translate(0 -2.2)">${DUCK_BODY}${DUCK_FACE}${flap ? DUCK_WING : ''}</g>`;
+  return `<g transform="translate(${x} ${y}) rotate(${tilt}) scale(${flip ? -k : k} ${k})"><g class="sc-hop"><g class="${anim}">${art}</g></g></g>`;
 }
 
 // A small car, facing right, drawn with its rear wheel's ground point at 0 0.
-function car(cls) {
+// rider: whatever sits on it (in car coordinates), moving with the body.
+function car(cls, rider = '') {
   const wheel = (cx) => `<g transform="translate(${cx} -10)">
       <circle r="9.5" fill="#1b1f27" stroke="#323843" stroke-width="1"/>
       <circle r="4.6" fill="#9aa1ab"/>
@@ -140,13 +142,13 @@ function car(cls) {
       <path d="M6 -14 Q2 -14 2 -19 V-30 Q2 -36 8 -37 L18 -38 L30 -54 Q32 -57 36 -57 H62 Q66 -57 69 -54 L82 -38 L92 -36 Q96 -35 96 -29 V-19 Q96 -14 92 -14 Z" fill="#5f87b3"/>
       <path d="M33 -53 H47 V-39 H22 Z" fill="#cfe2f7" fill-opacity="0.55"/>
       <path d="M51 -53 H63 Q65 -53 67 -51 L78 -39 H51 Z" fill="#cfe2f7" fill-opacity="0.55"/>
-      <g clip-path="url(#carWin)">${duck(53.7, -32, 1.7, { bob: false, mask: false })}<path d="M71 -50 L64 -40" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity="0.25"/></g>
       <path d="M49 -38 V-16 M2 -21.5 H96" stroke="#3f6189" stroke-width="0.8" fill="none"/>
       <path d="M53 -33 H58" stroke="#3f6189" stroke-width="1.3" stroke-linecap="round"/>
       <ellipse cx="93.6" cy="-30" rx="2.4" ry="2" fill="#ffe39a"/>
       <rect x="1.4" y="-33" width="2.6" height="5" rx="1" fill="#e05a4f"/>
       <rect x="-4" y="-17" width="7" height="3" rx="1" fill="#9aa1ab"/>
       <path d="M7 -14 A13 13 0 0 1 33 -14 Z M63 -14 A13 13 0 0 1 89 -14 Z" fill="#12161d"/>
+      ${rider}
     </g>
     ${wheel(20)}${wheel(76)}
   </g>`;
@@ -188,11 +190,11 @@ const SCENES = {
       <path class="solid" d="M96 222 V196 L105 190 V196 L114 190 V196 L123 190 V222 Z"/>
       <rect x="100" y="203" width="5" height="5" rx="1" fill="#f6d65b" fill-opacity="0.5"/>
       <rect x="109" y="203" width="5" height="5" rx="1" fill="#f6d65b" fill-opacity="0.5"/>
+      ${duck(121, 164.3, 1.5)}
       <g transform="translate(121 162)"><g class="sc-live"><g class="sc-lean">${loops(12, 4.2, '<circle r="4.6" fill="url(#scPuff)"/>', (i) => `--dx:${-6 - (i % 3) * 4}px;--dy:-58px;--grow:3;--op:.8`)}</g></g></g>
       <path d="M96 216 C86 216 82 220 70 220" fill="none" stroke="#c9ced6" stroke-width="1.6" stroke-linecap="round"/>
       <ellipse class="solid" cx="50" cy="220" rx="24" ry="2.6"/>
       <rect class="solid" x="45.5" y="160" width="9" height="60" rx="2"/>
-      ${duck(20, 222, 2.1)}
       <rect x="28" y="64" width="44" height="94" rx="7" fill="#262c35" stroke="var(--glass)" stroke-width="1.2"/>
       <rect x="31.5" y="72" width="37" height="80" rx="3" fill="#0f141b"/>
       <rect x="44" y="67.4" width="12" height="1.6" rx="0.8" fill="var(--glass)" opacity="0.6"/>
@@ -238,7 +240,6 @@ const SCENES = {
       <g class="sc-butts"></g>
       <path class="solid" d="M19 198 A50 8 0 0 0 119 198 L116 210 Q115 214 110 214 H28 Q23 214 22 210 Z"/>
       <path class="solid" d="M19 198 A50 8 0 0 0 119 198 L109 198.6 A40 5 0 0 1 29 198.6 Z"/>
-      ${duck(30, 203, 1.6)}
       <g transform="translate(121 193) rotate(5)">
         <rect class="sc-paper" x="-80" y="-3" width="60.5" height="6" fill="#eceff3"/>
         <rect x="-20" y="-3" width="20" height="6" rx="1.2" fill="#d39a54"/>
@@ -249,6 +250,7 @@ const SCENES = {
           <rect class="sc-ember" x="-0.4" y="-3" width="1.8" height="6" rx="0.6" fill="#ff6a2b"/>
           <g class="sc-live"><circle class="sc-glow" cx="0" cy="0" r="7.5" fill="url(#scGlow)"/></g>
         </g>
+        ${duck(-9, -3, 1.2)}
       </g>
       <g class="sc-wisps"><g class="sc-live"><g class="sc-lean"><path d="M0 0 c-1.6 -4 1.6 -7 0 -12 c-1.6 -4 1.6 -7 0 -12" fill="none" stroke="#dde1e6" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/>${loops(5, 5, '<path d="M0 0 c-3 -6 3 -10 0 -16 c-3 -6 3 -10 0 -16 c-3 -6 3 -10 0 -16" fill="none" stroke="#dde1e6" stroke-width="1.2" stroke-linecap="round"/>', (i) => `--dx:${3 + (i % 2) * 4}px;--dy:-62px;--grow:1.45;--op:.85;--s0:.75;--origin:50% 100%`)}</g></g></g>
       </g>`,
@@ -310,7 +312,7 @@ const SCENES = {
         <line class="sc-hand" x1="0" y1="0" x2="0" y2="-19" stroke="#eaf1fb" stroke-width="1.6" stroke-linecap="round"/>
         <circle r="2" fill="#eaf1fb"/>
       </g>
-      <g transform="translate(${CAR_AT[0]} ${CAR_AT[1]}) scale(${CAR_AT[2]})">${car('sc-idle')}</g>
+      <g transform="translate(${CAR_AT[0]} ${CAR_AT[1]}) scale(${CAR_AT[2]})">${car('sc-idle', `<g clip-path="url(#carWin)">${duck(51.5, -32, 1.7, { anim: '' })}<path d="M71 -50 L64 -40" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity="0.25"/></g>`)}</g>
       <g transform="translate(${EXHAUST[0]} ${EXHAUST[1]})"><g class="sc-live"><g class="sc-lean">${loops(10, 2.8, '<circle r="4" fill="url(#scPuff)"/>', (i) => `--dx:${-18 - (i % 3) * 5}px;--dy:${-26 - (i % 2) * 8}px;--grow:2.8;--op:.85`)}</g></g></g>`,
     init(a, r) {
       r.tally = a.querySelector('.sc-tally');
@@ -353,7 +355,7 @@ const SCENES = {
       <rect x="-2" y="222" width="142" height="9" fill="#262b33"/>
       <path class="sc-road" d="M-2 226.5 H140" stroke="#c9ced6" stroke-opacity="0.7" stroke-width="1.1" stroke-dasharray="8 8"/>
       <g class="sc-live sc-speed"><path d="M12 178 H26"/><path d="M6 190 H22" style="animation-delay:-.2s"/><path d="M14 200 H28" style="animation-delay:-.4s"/></g>
-      <g transform="translate(${CAR_AT[0]} ${CAR_AT[1]}) scale(${CAR_AT[2]})">${car('sc-drive')}</g>
+      <g transform="translate(${CAR_AT[0]} ${CAR_AT[1]}) scale(${CAR_AT[2]})">${car('sc-drive', duck(87, -37.2, 1.5, { tilt: -8, anim: 'sc-wind' }))}</g>
       <g transform="translate(${EXHAUST[0]} ${EXHAUST[1]})"><g class="sc-live">${loops(8, 1.3, '<circle r="3.6" fill="url(#scPuff)"/>', (i) => `--dx:-38px;--dy:${-4 - (i % 3) * 3}px;--grow:2.4;--op:.8`)}</g></g>`,
     init(a, r) {
       r.rolls = [...a.querySelectorAll('.sc-roll')];
@@ -374,10 +376,11 @@ const SCENES = {
     svg: `
       <g class="sc-live"><ellipse cx="69" cy="222" rx="62" ry="6" fill="url(#scGlow)" opacity="0.45"/></g>
       <g class="sc-stacks"></g>
-      ${duck(116, 233, 2, { flip: true })}
+      <g class="sc-floater">${duck(0, 0, 1.6, { anim: 'sc-float', flap: true })}</g>
       <g class="sc-more"></g>`,
     init(a, r) {
       r.stacks = a.querySelector('.sc-stacks');
+      r.floater = a.querySelector('.sc-floater');
       r.more = a.querySelector('.sc-more');
     },
     update(n, r) {
@@ -394,6 +397,11 @@ const SCENES = {
       if (k === 3) per.sort((a, b) => b - a).splice(1, 0, per.shift()); // tallest in the middle
       r.emits = [];
       r.stacks.innerHTML = xs.map((cx, i) => tireStack(cx, per[i], w, (26 + 3 * per[i]) * small, r)).join('');
+      // The duck rides the smoke a little above the tallest fire.
+      const t = per.indexOf(Math.max(...per));
+      const top = GROUND_Y - (per[t] - 1) * 10.5 - 12;
+      const y = Math.max(44, top - (26 + 3 * per[t]) * small - 30);
+      r.floater.style.transform = `translate(${xs[t]}px, ${y.toFixed(1)}px)`;
       badge(r.more, N > 21 ? `+${fmtCount(N - 21)} more` : '', 6, 14);
     },
     event(e, s, r) {
@@ -411,7 +419,6 @@ const SCENES = {
       <g class="sc-live">${Array.from({ length: 7 }, (_, i) => `<g transform="translate(${14 + ((i * 53) % 104)} ${18 + ((i * 29) % 40)})">${loops(1, 6, '<circle r="1.8" fill="#d5d9df"/>', `--dx:${(i % 3) * 4 - 4}px;--dy:110px;--grow:.5;--op:.9;--s0:1;animation-delay:${(-i * 0.86).toFixed(2)}s`)}</g>`).join('')}</g>
       <path d="M4 222.5 H134" stroke="#4c9a57" stroke-opacity="0.45" stroke-width="1.2" stroke-linecap="round"/>
       <g class="sc-forest"></g>
-      ${duck(20, 233, 2.1, { mask: false })}
       <g class="sc-more"></g>`,
     init(a, r) {
       r.forest = a.querySelector('.sc-forest');
@@ -428,10 +435,10 @@ const SCENES = {
         r.forest.innerHTML = slots
           .map(([x, y, k, i]) =>
             i < shown
-              ? `<g transform="translate(${x} ${y}) scale(${k})">${treeSvg(i)}</g>`
+              ? `<g transform="translate(${x} ${y}) scale(${k})">${treeSvg(i, false, i === 0 ? duck(2, -42, 1.2, { tilt: 14 }) : '')}</g>`
               : `<g transform="translate(${x} ${y}) scale(${k})"><g class="sc-sapling">${treeSvg(i, true)}</g></g>`
           )
-          .join('');
+          .join('') + (shown ? '' : duck(24, 233, 2, { anim: 'sc-duck' }));
         r.crowns = TREE_SLOTS.slice(0, shown).map(([x, y, k]) => [x, y - 28 * k]);
         badge(r.more, whole > TREE_SLOTS.length ? `+${fmtCount(whole - TREE_SLOTS.length)} more` : '', 6, 14);
       }
@@ -485,7 +492,7 @@ const TREE_SLOTS = [
   [60, 178, 0.64], [78, 178, 0.64], [24, 178, 0.64], [42, 178, 0.64], [96, 178, 0.64], [114, 178, 0.64], [8, 178, 0.64], [130, 178, 0.64],
 ];
 
-function treeSvg(i, young) {
+function treeSvg(i, young, rider = '') {
   const c = young ? ['#5aa765', '#6cb86f', '#8ccf8f'] : ['#3f8a4d', '#4f9d5b', '#66b36f'];
   return `<rect x="-2" y="-16" width="4" height="16.5" rx="1" fill="#8b6b4b"/>
     <g class="sc-crown" style="animation-delay:${(-i * 0.7).toFixed(1)}s">
@@ -493,6 +500,7 @@ function treeSvg(i, young) {
       <circle cx="-6.5" cy="-23.5" r="8.5" fill="${c[1]}"/>
       <circle cx="6.5" cy="-24.5" r="9" fill="${c[1]}"/>
       <circle cx="-3" cy="-34" r="6" fill="${c[2]}"/>
+      ${rider}
     </g>`;
 }
 
@@ -501,8 +509,8 @@ const sceneState = { unit: null, r: {} };
 
 // unit: which scene; n: how many; lit: false when there's nothing yet, so
 // nothing is burning; grew: the automatic choice just moved up the ladder;
-// ko: X eyes for the duck.
-function showScene(unit, n, { lit = true, grew = false, ko = false } = {}) {
+// ko: X eyes for the duck; smoking: a cigarette for it.
+function showScene(unit, n, { lit = true, grew = false, ko = false, smoking = false } = {}) {
   const def = SCENES[unit] || SCENES.cigarette;
   const art = $('sceneArt');
   if (unit !== sceneState.unit) {
@@ -519,6 +527,7 @@ function showScene(unit, n, { lit = true, grew = false, ko = false } = {}) {
   }
   art.classList.toggle('sc-off', !lit);
   art.classList.toggle('sc-ko', ko);
+  art.classList.toggle('sc-smoking', smoking);
 }
 
 function sceneEvent(e) {

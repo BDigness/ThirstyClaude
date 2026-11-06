@@ -1290,8 +1290,9 @@ function renderScene(s, key, pouring) {
   const rose = !s.scanning && prevLiters !== null && key === prevKey && kg > prevLiters;
   const grew = rose && sceneState.unit !== null && unit !== sceneState.unit && SCENE_LADDER.indexOf(unit) > SCENE_LADDER.indexOf(sceneState.unit);
   if (unit !== sceneState.unit) cancelDrips();
-  // Over 20 minutes of idling an hour, the duck is knocked out.
-  showScene(unit, sceneCount(kg, unit, q), { lit: kg > 0, grew, ko: (s.rateKg || 0) > q.idleKgPerHour / 3 });
+  // Over 20 minutes of idling an hour the duck is knocked out; in the cigarette scene, over 50 an hour, it smokes.
+  const rate = s.rateKg || 0;
+  showScene(unit, sceneCount(kg, unit, q), { lit: kg > 0, grew, ko: rate > q.idleKgPerHour / 3, smoking: unit === 'cigarette' && rate > 50 * q.cigaretteKg });
   if (rose && !grew && !REDUCED_MOTION) queueDrips(newEvents(s));
 }
 
