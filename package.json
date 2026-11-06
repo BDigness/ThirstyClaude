@@ -1,0 +1,47 @@
+{
+  "name": "thirstyclaude",
+  "productName": "ThirstyClaude",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A desktop widget: a graduated cylinder that fills with the estimated water behind your Claude Code tokens",
+  "main": "main.js",
+  "bin": {
+    "thirstyclaude": "bin/launch.js"
+  },
+  "scripts": {
+    "start": "node bin/launch.js",
+    "dev": "electron .",
+    "demo": "electron . --demo"
+  },
+  "files": [
+    "main.js",
+    "scanner.js",
+    "model.js",
+    "preload.js",
+    "index.html",
+    "renderer.js",
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BDigness/ThirstyClaude.git"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "tokens",
+    "water",
+    "electron",
+    "tray",
+    "widget"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "electron": "33.4.11"
+  },
+  "license": "MIT"
+}

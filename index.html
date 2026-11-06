@@ -1,0 +1,96 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'">
+<title>ThirstyClaude</title>
+<style>
+  :root {
+    --text: #eaf1fb;
+    --muted: rgba(234, 241, 251, 0.62);
+    --card: rgba(14, 18, 26, 0.66);
+    --edge: rgba(255, 255, 255, 0.09);
+    --glass: rgba(214, 230, 255, 0.55);
+    --glass-fill: rgba(190, 215, 255, 0.16);
+  }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+    user-select: none;
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    color: var(--text);
+  }
+  .card {
+    position: absolute;
+    inset: 6px;
+    border-radius: 16px;
+    background: var(--card);
+    border: 1px solid var(--edge);
+    -webkit-app-region: drag;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6px 0 10px;
+    box-sizing: border-box;
+  }
+  svg { display: block; width: 138px; height: 236px; overflow: visible; }
+  .info { -webkit-app-region: no-drag; text-align: center; margin-top: 2px; cursor: default; }
+  #liters { font-size: 21px; font-weight: 600; letter-spacing: 0.2px; font-variant-numeric: tabular-nums; }
+  #sub { font-size: 10.5px; color: var(--muted); margin-top: 1px; white-space: nowrap; }
+  .tick { stroke: rgba(230, 240, 255, 0.7); stroke-width: 1; }
+  .label { fill: rgba(234, 241, 251, 0.72); font-size: 8.5px; font-variant-numeric: tabular-nums; }
+  #water { transition: transform 1.4s cubic-bezier(.2, .8, .2, 1), opacity .4s; }
+  .wave { animation: drift 3.4s linear infinite; }
+  .wave.back { animation-duration: 5.5s; animation-direction: reverse; opacity: 0.55; }
+  @keyframes drift { from { transform: translateX(0); } to { transform: translateX(-24px); } }
+  .ripple { transform-box: fill-box; transform-origin: center; }
+  @media (prefers-reduced-motion: reduce) {
+    .wave { animation: none; }
+    #water { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <svg viewBox="0 0 138 236" aria-hidden="true">
+    <defs>
+      <linearGradient id="waterGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#5cc0ff" stop-opacity="0.92"/>
+        <stop offset="1" stop-color="#1d63d6" stop-opacity="0.95"/>
+      </linearGradient>
+      <linearGradient id="glassGrad" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#fff" stop-opacity="0.10"/>
+        <stop offset="0.5" stop-color="#fff" stop-opacity="0.02"/>
+        <stop offset="1" stop-color="#fff" stop-opacity="0.08"/>
+      </linearGradient>
+      <clipPath id="tube"><rect x="58.5" y="12" width="41" height="196" rx="2"/></clipPath>
+    </defs>
+
+    <rect x="58" y="12" width="42" height="197" fill="url(#glassGrad)"/>
+    <g clip-path="url(#tube)">
+      <g id="water" style="transform: translateY(206px); opacity: 0">
+        <path id="waveBack" class="wave back" fill="#86d3ff"/>
+        <rect x="20" y="1.5" width="130" height="240" fill="url(#waterGrad)"/>
+        <path id="waveFront" class="wave" fill="#5cc0ff" fill-opacity="0.92"/>
+      </g>
+    </g>
+    <g id="ticks"></g>
+
+    <path d="M51 9 Q56 10 57 15 L57 206 Q57 209 60 209 L98 209 Q101 209 101 206 L101 15 Q101 11 105 9"
+          fill="none" stroke="var(--glass)" stroke-width="1.5" stroke-linejoin="round"/>
+    <ellipse cx="78" cy="9.5" rx="27" ry="2.4" fill="none" stroke="var(--glass)" stroke-width="1.1"/>
+    <rect x="94" y="22" width="2.2" height="170" rx="1.1" fill="#fff" opacity="0.13"/>
+    <rect x="60" y="209" width="38" height="9" fill="var(--glass-fill)" stroke="var(--glass)" stroke-width="1"/>
+    <path d="M40 218 H118 L127 231 H31 Z" fill="var(--glass-fill)" stroke="var(--glass)" stroke-width="1.1" stroke-linejoin="round"/>
+    <g id="drops"></g>
+  </svg>
+  <div class="info" id="info">
+    <div id="liters">…</div>
+    <div id="sub">reading logs</div>
+  </div>
+</div>
+<script src="renderer.js"></script>
+</body>
+</html>
