@@ -201,6 +201,8 @@
   @keyframes scRoad { to { stroke-dashoffset: 16; } }
   .sc-speed path { stroke: rgba(234, 241, 251, .45); stroke-width: 1; stroke-linecap: round; animation: scSpeed .6s linear infinite; }
   @keyframes scSpeed { from { transform: translateX(6px); opacity: 0; } 30% { opacity: 1; } to { transform: translateX(-14px); opacity: 0; } }
+  .sc-duck { transform-box: fill-box; transform-origin: 50% 100%; animation: scDuck 2.8s ease-in-out infinite alternate; }
+  @keyframes scDuck { from { transform: rotate(-3deg); } to { transform: rotate(3deg); } }
   .sc-crown { transform-box: fill-box; transform-origin: 50% 100%; animation: scSway 5.5s ease-in-out infinite alternate; }
   @keyframes scSway { from { transform: rotate(-2deg); } to { transform: rotate(2deg); } }
   .sc-off .sc-spokes, .sc-off .sc-body, .sc-off .sc-road, .sc-off .sc-roll { animation: none; }
@@ -244,6 +246,8 @@
   <svg viewBox="0 0 138 236" aria-hidden="true">
     <defs>
       <clipPath id="vclip"><path id="vclipPath"/></clipPath>
+      <!-- The car's front window (car coordinates), so the duck can sit behind the wheel -->
+      <clipPath id="carWin"><path d="M51 -53 H63 Q65 -53 67 -51 L78 -39 H51 Z"/></clipPath>
       <linearGradient id="glassGrad" x1="0" y1="0" x2="1" y2="0">
         <stop offset="0" stop-color="#fff" stop-opacity="0.10"/>
         <stop offset="0.5" stop-color="#fff" stop-opacity="0.02"/>

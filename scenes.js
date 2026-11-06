@@ -101,6 +101,29 @@ function badge(g, text, x, y, anchor = 'start') {
 }
 
 // ── Shared pieces ───────────────────────────────────────────────────────────
+// The rubber duck comes along: the bath duck, facing right. Near the smoke it
+// wears a gas mask (lens, face piece, filter canister and straps); in the car
+// and in the trees it doesn't need one.
+const DUCK_BODY = `
+    <path d="M-5.6 -1.8 L-8.4 -4.6 L-6.6 -0.4 Z" fill="#f6c445"/>
+    <ellipse cx="0" cy="-1.3" rx="6.2" ry="3.5" fill="#f6c445"/>
+    <path d="M-2.8 -2.3 Q0 -4.2 2.4 -2.2" fill="none" stroke="#d29a22" stroke-width="0.7" stroke-linecap="round"/>
+    <circle cx="3.7" cy="-6" r="2.7" fill="#f6c445"/>`;
+const DUCK_FACE = `
+    <path d="M6 -6.4 L8.7 -5.6 L6 -4.7 Z" fill="#f08a24"/>
+    <circle cx="4.5" cy="-6.6" r="0.5" fill="#1b1f27"/>`;
+const DUCK_MASK = `
+    <path d="M1.1 -7.6 Q3.4 -9.5 5.6 -8.1 M1.1 -5.2 L4.2 -4.4" fill="none" stroke="#2b2f36" stroke-width="0.7" stroke-linecap="round"/>
+    <path d="M4.1 -8.3 Q7.5 -8.7 7.7 -5.7 Q7.7 -3.4 5.3 -3.5 Q3.6 -3.7 3.7 -5.8 Z" fill="#3d434c"/>
+    <circle cx="5.4" cy="-6.6" r="1.15" fill="#bfe3ff" fill-opacity="0.9" stroke="#1b1f27" stroke-width="0.35"/>
+    <circle cx="8.4" cy="-4.4" r="1.5" fill="#6b717a" stroke="#2b2f36" stroke-width="0.4"/>
+    <path d="M7.7 -4.9 H9.1 M7.6 -3.9 H9.2" stroke="#2b2f36" stroke-width="0.3"/>`;
+// Its base sits at x y; k is the size (1 = the bath duck), flip faces it left.
+function duck(x, y, k, { flip = false, bob = true, mask = true } = {}) {
+  const art = `<g transform="translate(0 -2.2)">${DUCK_BODY}${mask ? DUCK_MASK : DUCK_FACE}</g>`;
+  return `<g transform="translate(${x} ${y}) scale(${flip ? -k : k} ${k})"><g class="sc-hop"><g class="${bob ? 'sc-duck' : ''}">${art}</g></g></g>`;
+}
+
 // A small car, facing right, drawn with its rear wheel's ground point at 0 0.
 function car(cls) {
   const wheel = (cx) => `<g transform="translate(${cx} -10)">
@@ -113,6 +136,7 @@ function car(cls) {
       <path d="M6 -14 Q2 -14 2 -19 V-30 Q2 -36 8 -37 L18 -38 L30 -54 Q32 -57 36 -57 H62 Q66 -57 69 -54 L82 -38 L92 -36 Q96 -35 96 -29 V-19 Q96 -14 92 -14 Z" fill="#5f87b3"/>
       <path d="M33 -53 H47 V-39 H22 Z" fill="#cfe2f7" fill-opacity="0.55"/>
       <path d="M51 -53 H63 Q65 -53 67 -51 L78 -39 H51 Z" fill="#cfe2f7" fill-opacity="0.55"/>
+      <g clip-path="url(#carWin)">${duck(53.7, -32, 1.7, { bob: false, mask: false })}<path d="M71 -50 L64 -40" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity="0.25"/></g>
       <path d="M49 -38 V-16 M2 -21.5 H96" stroke="#3f6189" stroke-width="0.8" fill="none"/>
       <path d="M53 -33 H58" stroke="#3f6189" stroke-width="1.3" stroke-linecap="round"/>
       <ellipse cx="93.6" cy="-30" rx="2.4" ry="2" fill="#ffe39a"/>
@@ -164,6 +188,7 @@ const SCENES = {
       <path d="M96 216 C86 216 82 220 70 220" fill="none" stroke="#c9ced6" stroke-width="1.6" stroke-linecap="round"/>
       <ellipse class="solid" cx="50" cy="220" rx="24" ry="2.6"/>
       <rect class="solid" x="45.5" y="160" width="9" height="60" rx="2"/>
+      ${duck(20, 222, 2.1)}
       <rect x="28" y="64" width="44" height="94" rx="7" fill="#262c35" stroke="var(--glass)" stroke-width="1.2"/>
       <rect x="31.5" y="72" width="37" height="80" rx="3" fill="#0f141b"/>
       <rect x="44" y="67.4" width="12" height="1.6" rx="0.8" fill="var(--glass)" opacity="0.6"/>
@@ -209,6 +234,7 @@ const SCENES = {
       <g class="sc-butts"></g>
       <path class="solid" d="M19 198 A50 8 0 0 0 119 198 L116 210 Q115 214 110 214 H28 Q23 214 22 210 Z"/>
       <path class="solid" d="M19 198 A50 8 0 0 0 119 198 L109 198.6 A40 5 0 0 1 29 198.6 Z"/>
+      ${duck(30, 203, 1.6)}
       <g transform="translate(121 193) rotate(5)">
         <rect class="sc-paper" x="-80" y="-3" width="60.5" height="6" fill="#eceff3"/>
         <rect x="-20" y="-3" width="20" height="6" rx="1.2" fill="#d39a54"/>
@@ -344,6 +370,7 @@ const SCENES = {
     svg: `
       <g class="sc-live"><ellipse cx="69" cy="222" rx="62" ry="6" fill="url(#scGlow)" opacity="0.45"/></g>
       <g class="sc-stacks"></g>
+      ${duck(116, 233, 2, { flip: true })}
       <g class="sc-more"></g>`,
     init(a, r) {
       r.stacks = a.querySelector('.sc-stacks');
@@ -380,6 +407,7 @@ const SCENES = {
       <g class="sc-live">${Array.from({ length: 7 }, (_, i) => `<g transform="translate(${14 + ((i * 53) % 104)} ${18 + ((i * 29) % 40)})">${loops(1, 6, '<circle r="1.8" fill="#d5d9df"/>', `--dx:${(i % 3) * 4 - 4}px;--dy:110px;--grow:.5;--op:.9;--s0:1;animation-delay:${(-i * 0.86).toFixed(2)}s`)}</g>`).join('')}</g>
       <path d="M4 222.5 H134" stroke="#4c9a57" stroke-opacity="0.45" stroke-width="1.2" stroke-linecap="round"/>
       <g class="sc-forest"></g>
+      ${duck(20, 233, 2.1, { mask: false })}
       <g class="sc-more"></g>`,
     init(a, r) {
       r.forest = a.querySelector('.sc-forest');
@@ -492,6 +520,9 @@ function sceneEvent(e) {
   if (!def || $('sceneArt').classList.contains('sc-off')) return;
   def.event(e, e.sub ? 0.65 : 1, sceneState.r);
   sound(e.sub);
+  // The duck hops at each puff.
+  const hop = $('sceneArt').querySelector('.sc-hop');
+  if (hop && !REDUCED_MOTION) hop.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(-2.4px)', offset: 0.35 }, { transform: 'translateY(0)' }], { duration: 420, easing: 'ease-out' });
 }
 
 // Moving up a step: the old scene shrinks away and the new one grows in.
