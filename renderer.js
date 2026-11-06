@@ -155,6 +155,10 @@ const VESSELS = {
   },
 };
 
+// Top of each vessel's inside (spilled drops must clear it), and where the duck floats.
+const RIM = { tube: 16, glass: 62, cylinder: 12, bucket: 112, barrel: 100, tub: 124, hottub: 126, pool: 104 };
+const DUCK_X = { tub: 62, hottub: 52, pool: 104 };
+
 // Automatic: each vessel covers roughly its real-world capacity.
 function vesselFor(liters) {
   if (liters < 0.1) return 'tube';
@@ -190,6 +194,8 @@ function setVessel(name) {
   $('front').innerHTML = v.front;
   $('vclipPath').setAttribute('d', v.clip);
   $('ticks').textContent = '';
+  card.classList.toggle('ducky', name in DUCK_X);
+  if (DUCK_X[name]) $('duck').setAttribute('transform', `translate(${DUCK_X[name]} 0)`);
   instant([waterEl, $('bands'), $('range')]);
 }
 
@@ -324,6 +330,7 @@ let levelTimer = null;
 function applyLevel(y, layers) {
   surfaceY = y;
   waterEl.style.transform = `translateY(${y.toFixed(2)}px)`;
+  $('steam').style.transform = `translateY(${y.toFixed(2)}px)`;
   const v = VESSELS[cur.vessel];
   const H = Math.max(0, v.bottom - y);
   const total = layers.reduce((s, l) => s + l.v, 0);
@@ -384,9 +391,13 @@ function renderHits(layers, y, H, total, v) {
 
 function showTip(l, e) {
   if (!l) return;
-  const tip = $('tip');
   const pct = l.share >= 0.995 ? '100%' : l.share < 0.01 ? '<1%' : `${Math.round(l.share * 100)}%`;
-  tip.innerHTML = `<i style="background:${l.color}"></i><b>${esc(l.name)}</b>${l.text} · ${pct}`;
+  placeTip(`<i style="background:${l.color}"></i><b>${esc(l.name)}</b>${l.text} · ${pct}`, e);
+}
+
+function placeTip(html, e) {
+  const tip = $('tip');
+  tip.innerHTML = html;
   const r = card.getBoundingClientRect();
   const w = tip.offsetWidth;
   let x = e.clientX - r.left + 12;
@@ -799,7 +810,7 @@ const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 const motion = { last: null, vx: 0, vy: 0, pvx: 0, pvy: 0, lastEvent: 0, t: 0, th: 0, w: 0, b: 0, bv: 0, running: false };
 
 function onMove([x, y]) {
-  if (REDUCED_MOTION) return;
+  if (REDUCED_MOTION || iceLevel >= 0.6) return; // ice doesn't slosh
   const now = performance.now();
   if (!motion.last || now - motion.last.now > 200) {
     motion.vx = motion.vy = 0; // a new drag starts from rest
@@ -847,16 +858,275 @@ function sloshStep(now) {
   $('slosh').setAttribute('transform', `translate(0 ${motion.b.toFixed(2)}) rotate(${motion.th.toFixed(2)} ${s.cx} 0)`);
   $('chopFront').setAttribute('transform', `scale(1 ${chop.toFixed(2)})`);
   $('chopBack').setAttribute('transform', `scale(1 ${chop.toFixed(2)})`);
+  if (DUCK_X[cur.vessel]) $('duck').setAttribute('transform', `translate(${(DUCK_X[cur.vessel] - motion.th * 0.7).toFixed(2)} 0)`); // slides downhill
+  spillStep(dt, s, now);
 
   const settled =
-    now - motion.lastEvent > 400 && Math.abs(motion.th) < 0.05 && Math.abs(motion.w) < 0.5 && Math.abs(motion.b) < 0.05 && Math.abs(motion.bv) < 0.5;
+    now - motion.lastEvent > 400 &&
+    Math.abs(motion.th) < 0.05 &&
+    Math.abs(motion.w) < 0.5 &&
+    Math.abs(motion.b) < 0.05 &&
+    Math.abs(motion.bv) < 0.5 &&
+    !spillDrops.length;
   if (settled) {
     for (const id of ['slosh', 'chopFront', 'chopBack']) $(id).removeAttribute('transform');
+    if (DUCK_X[cur.vessel]) $('duck').setAttribute('transform', `translate(${DUCK_X[cur.vessel]} 0)`);
     motion.th = motion.w = motion.b = motion.bv = 0;
     motion.running = false;
     return;
   }
   requestAnimationFrame(sloshStep);
+}
+
+// ── Spills: a hard swing throws water up the high wall, sometimes over the rim ──
+// The wall rises at (distance from the pivot × swing speed); drops launched at
+// that speed land back in, or clear the rim and splash below the vessel.
+const SPILL_GRAVITY = 700; // px/s²
+const SPILL_BOOST = 6.5; // splash is livelier than the wall itself
+const SPILL_MIN = 70; // px/s up the wall before anything leaves the surface
+const GROUND = 233;
+let spillDrops = [];
+let lastSpill = 0;
+
+function spillStep(dt, s, now) {
+  const v = VESSELS[cur.vessel];
+  const wet = waterEl.style.opacity !== '0' && surfaceY < v.bottom - 3 && iceLevel < 0.6 && Date.now() >= pouringUntil;
+  const rising = Math.sign(motion.w) === Math.sign(motion.th) && Math.abs(motion.th) > 2;
+  if (wet && rising && now - lastSpill > 40 && spillDrops.length < 14) {
+    const left = motion.th > 0; // tilted clockwise: the left wall is the high side
+    const wallX = left ? v.hit[0] + 1.5 : v.hit[1] - 1.5;
+    const arm = Math.abs(wallX - s.cx);
+    const up = arm * Math.abs((motion.w * Math.PI) / 180) * SPILL_BOOST;
+    if (up > SPILL_MIN) {
+      lastSpill = now;
+      const yWall = surfaceY - arm * Math.tan(Math.abs((motion.th * Math.PI) / 180)) + motion.b;
+      const color = look ? '#b8bec7' : (lastState && lastState.layers[0] && lastState.layers[0].color) || '#8fd6ff';
+      const d = el('circle', { r: (1 + Math.random() * 0.6).toFixed(2), fill: color });
+      $('spill').appendChild(d);
+      spillDrops.push({ el: d, color, x: wallX, y: yWall, vx: (left ? -1 : 1) * (12 + Math.random() * 30), vy: -up * (0.7 + Math.random() * 0.5), x0: v.hit[0], x1: v.hit[1], rim: RIM[cur.vessel] ?? v.top, out: false });
+    }
+  }
+  for (const p of spillDrops) {
+    p.vy += SPILL_GRAVITY * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    if (!p.out && (p.x < p.x0 || p.x > p.x1)) {
+      if (p.y < p.rim) p.out = true; // over the lip
+      else p.x = clamp(p.x, p.x0, p.x1); // still below the rim: runs up the wall
+    }
+    if (!p.out && p.vy > 0 && p.y > surfaceY) p.done = true; // fell back in
+    if (p.out && p.y > GROUND) {
+      p.done = true;
+      puddle(p.x, p.color);
+    }
+    p.el.setAttribute('transform', `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`);
+  }
+  spillDrops = spillDrops.filter((p) => {
+    if (p.done) p.el.remove();
+    return !p.done;
+  });
+}
+
+function puddle(x, color) {
+  const p = el('ellipse', { cx: x, cy: GROUND, rx: 1.2, ry: 0.5, fill: color, 'fill-opacity': 0.75 });
+  $('spill').appendChild(p);
+  p.style.transformBox = 'fill-box';
+  p.style.transformOrigin = 'center';
+  p.animate([{ transform: 'scale(1)', opacity: 1 }, { transform: 'scale(3.2, 1.6)', opacity: 0.8, offset: 0.15 }, { transform: 'scale(3.6, 1.7)', opacity: 0 }], { duration: 2600, easing: 'ease-out' }).onfinish = () =>
+    p.remove();
+  sound(true);
+}
+
+// ── Ice: the water freezes after a few idle hours and cracks when work resumes ──
+const FREEZE_AFTER_MS = 2 * 3600e3; // starts to ice over
+const FROZEN_MS = 3 * 3600e3; // solid
+let iceLevel = 0;
+let iceReady = false;
+let thawUntil = 0;
+
+for (let i = 0; i < 18; i++) {
+  $('frost').appendChild(el('circle', { cx: ((i * 41) % 150) - 4, cy: 3 + ((i * 67) % 190), r: (0.5 + (i % 3) * 0.35).toFixed(2), fill: '#fff', 'fill-opacity': 0.55 }));
+}
+
+function freezeLevel(lastAt) {
+  if (!lastAt) return 0;
+  return clamp((Date.now() - lastAt - FREEZE_AFTER_MS) / (FROZEN_MS - FREEZE_AFTER_MS), 0, 1);
+}
+
+function setIce(f) {
+  iceLevel = f;
+  $('ice').style.opacity = f.toFixed(3);
+  card.classList.toggle('frozen', f >= 0.6);
+}
+
+function updateIce(lastAt) {
+  if (Date.now() < thawUntil) return;
+  const f = freezeLevel(lastAt);
+  if (!iceReady) {
+    iceReady = true;
+    instant([$('ice')]);
+    setIce(f);
+  } else if (iceLevel > 0.15 && f < iceLevel - 0.1 && !REDUCED_MOTION) thaw();
+  else setIce(f);
+}
+
+// Cracks race across the ice, a few shards pop off, and it melts away.
+function thaw() {
+  thawUntil = Date.now() + 2000;
+  const ice = $('ice');
+  const cracks = $('cracks');
+  const cx = (SLOSH[cur.vessel] || SLOSH.cylinder).cx;
+  cracks.textContent = '';
+  const lines = [
+    [0, 0, -5, 6, -2, 11, -9, 19, -6, 26],
+    [0, 0, 6, 5, 4, 12, 11, 18],
+    [-1, 0, -12, 4, -17, 9],
+    [1, 0, 13, 3, 19, 8, 24, 7],
+  ];
+  for (const pts of lines) {
+    let d = '';
+    for (let i = 0; i < pts.length; i += 2) d += `${i ? ' L' : 'M'}${(cx + pts[i]).toFixed(1)} ${pts[i + 1]}`;
+    const p = el('path', { d, fill: 'none', stroke: '#f4fbff', 'stroke-width': 0.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+    cracks.appendChild(p);
+    const len = p.getTotalLength();
+    p.style.strokeDasharray = `${len} ${len}`;
+    p.animate([{ strokeDashoffset: len }, { strokeDashoffset: 0 }], { duration: 260, easing: 'ease-out', fill: 'both' });
+  }
+  cracks.style.opacity = '1';
+  crackSound();
+  for (let i = 0; i < 6; i++) {
+    const x = cx + (i - 2.5) * 6;
+    const dx = (i - 2.5) * 4 + (Math.random() - 0.5) * 4;
+    const shard = el('path', { d: 'M-2 0 L0 -2.4 L2.2 -0.4 L0.6 1.6 Z', fill: '#e8f6ff', 'fill-opacity': 0.9 });
+    $('spill').appendChild(shard);
+    shard.animate(
+      [
+        { transform: `translate(${x}px, ${surfaceY}px) rotate(0deg)`, opacity: 1 },
+        { transform: `translate(${x + dx * 0.6}px, ${surfaceY - 9 - Math.random() * 6}px) rotate(${dx * 20}deg)`, opacity: 1, offset: 0.4 },
+        { transform: `translate(${x + dx}px, ${surfaceY + 3}px) rotate(${dx * 40}deg)`, opacity: 0 },
+      ],
+      { duration: 700, delay: 180, easing: 'ease-out', fill: 'both' }
+    ).onfinish = () => shard.remove();
+  }
+  iceLevel = 0;
+  card.classList.remove('frozen');
+  setTimeout(() => {
+    ice.style.transition = 'opacity 1.4s ease-in';
+    ice.style.opacity = '0';
+    setTimeout(() => {
+      ice.style.transition = '';
+      cracks.style.opacity = '0';
+      cracks.textContent = '';
+    }, 1500);
+  }, 320);
+}
+
+function crackSound() {
+  if (!lastState || !lastState.sounds) return;
+  const a = audioCtx();
+  if (!a) return;
+  const t = a.currentTime + 0.01;
+  const len = Math.floor(a.sampleRate * 0.09);
+  const buf = a.createBuffer(1, len, a.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+  const src = a.createBufferSource();
+  src.buffer = buf;
+  const hp = a.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 2200;
+  const g = a.createGain();
+  g.gain.value = 0.12;
+  src.connect(hp);
+  hp.connect(g);
+  g.connect(a.destination);
+  src.start(t);
+}
+
+// ── Boiling: bubbles and steam while many responses are arriving ─────────────
+const BUBBLES = 12;
+const bubbleAnims = [];
+let bubbleKey = '';
+
+for (let i = 0; i < BUBBLES; i++) {
+  $('bubbles').appendChild(el('circle', { r: (0.7 + (i % 3) * 0.45).toFixed(2), fill: 'none', stroke: '#e6f6ff', 'stroke-width': 0.5, opacity: 0 }));
+}
+for (const dx of [-11, 0, 11]) {
+  const g = el('g', { transform: `translate(${dx} 0)` });
+  g.appendChild(el('path', { class: 'wisp', d: 'M0 -2 q-3 -5 0 -10 q3 -5 0 -10', fill: 'none', stroke: 'rgba(230,240,255,0.7)', 'stroke-width': 1.6, 'stroke-linecap': 'round' }));
+  $('steamX').appendChild(g);
+}
+
+// x: 0 (calm) to 1 (full boil).
+function setBoil(x) {
+  const v = VESSELS[cur.vessel];
+  const depth = Math.max(0, v.bottom - surfaceY);
+  const n = depth > 6 ? Math.round(x * BUBBLES) : 0;
+  card.classList.toggle('boiling', x > 0.05);
+  $('steam').style.opacity = x.toFixed(2);
+  $('steamX').setAttribute('transform', `translate(${(SLOSH[cur.vessel] || SLOSH.cylinder).cx} 0)`);
+  const key = `${cur.vessel}|${Math.round(depth / 8)}`; // restart when the depth changes noticeably
+  const kids = $('bubbles').children;
+  for (let i = 0; i < BUBBLES; i++) {
+    const want = i < n;
+    if (bubbleAnims[i] && (!want || key !== bubbleKey)) {
+      bubbleAnims[i].cancel();
+      bubbleAnims[i] = null;
+    }
+    if (want && !bubbleAnims[i]) {
+      const bx = v.hit[0] + 3 + Math.random() * (v.hit[1] - v.hit[0] - 6);
+      const dur = (500 + depth * 11) * (0.8 + Math.random() * 0.4);
+      bubbleAnims[i] = kids[i].animate(
+        [
+          { transform: `translate(${bx}px, ${depth - 2}px) scale(.5)`, opacity: 0 },
+          { opacity: 0.8, offset: 0.12 },
+          { transform: `translate(${bx + 2}px, ${depth * 0.5}px) scale(.8)`, offset: 0.5 },
+          { transform: `translate(${bx - 1}px, 1px) scale(1.1)`, opacity: 0.8, offset: 0.96 },
+          { transform: `translate(${bx - 1}px, 0px) scale(1.4)`, opacity: 0 },
+        ],
+        { duration: dur, iterations: Infinity, delay: -Math.random() * dur }
+      );
+    }
+  }
+  bubbleKey = key;
+}
+
+// ── Jar shelf: one jar per day ──────────────────────────────────────────────
+let shelfDays = [];
+
+function renderShelf(shelf, co2) {
+  card.classList.toggle('shelf7', Boolean(shelf) && shelf.length === 7);
+  card.classList.toggle('shelf30', Boolean(shelf) && shelf.length === 30);
+  shelfDays = shelf || [];
+  const box = $('shelf');
+  if (!shelf) {
+    box.textContent = '';
+    return;
+  }
+  if (box.childElementCount !== shelf.length) {
+    box.textContent = '';
+    shelf.forEach((_, i) => {
+      const w = document.createElement('div');
+      w.className = 'jw';
+      w.innerHTML = '<div class="jar"><i></i></div><div class="jl"></div>';
+      w.addEventListener('mousemove', (e) => {
+        const d = shelfDays[i];
+        if (d) placeTip(`<b>${esc(d.label)}</b>${look ? fmtCo2(d.kg) : fmtLiters(d.l)}`, e);
+      });
+      w.addEventListener('mouseleave', hideTip);
+      box.appendChild(w);
+    });
+  }
+  const vals = shelf.map((d) => (co2 ? d.kg : d.l));
+  const max = Math.max(...vals);
+  shelf.forEach((d, i) => {
+    const w = box.children[i];
+    const fill = w.querySelector('i');
+    fill.style.height = `${max > 0 ? Math.max(vals[i] > 0 ? 4 : 0, (vals[i] / max) * 92) : 0}%`;
+    fill.style.background = co2 ? '#9aa1ab' : '#3987e5';
+    w.classList.toggle('today', i === shelf.length - 1);
+    w.querySelector('.jl').textContent = shelf.length === 7 ? 'SMTWTFS'[d.dow] : '';
+  });
 }
 
 // ── Render ──────────────────────────────────────────────────────────────────
@@ -938,6 +1208,10 @@ function render(s) {
     if (pouring || switched) cancelDrips();
     setLevel(levelY, layers, 0);
   }
+
+  updateIce(s.lastAt);
+  setBoil(!co2 && iceLevel < 0.05 && !s.scanning ? clamp(((s.busy || 0) - 5) / 10, 0, 1) : 0);
+  renderShelf(s.shelf, co2);
 
   if (L > 0 && !pouring) {
     clearTimeout(fadeTimer);

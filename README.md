@@ -6,7 +6,7 @@ fill with the estimated CO₂ instead.
 
 <p>
   <img src="docs/today.png" alt="Graduated cylinder at 6.6 L, filled in coloured layers by project (demo data)" width="150">
-  <img src="docs/all-time.png" alt="Bathtub at 417 L, about 2.8 bathtubs (demo data)" width="150">
+  <img src="docs/all-time.png" alt="Bathtub at 417 L with a rubber duck, and a shelf of seven daily jars below (demo data)" width="150">
   <img src="docs/co2.png" alt="Swimming pool filled with grey billowing smoke, 55 kg CO₂e, with a context-size hint (demo data)" width="150">
   <img src="docs/legend.png" alt="Hover legend with range, energy, tokens, projects and drop colours (demo data)" width="150">
 </p>
@@ -79,7 +79,19 @@ Developed on Windows. macOS and Linux should work but haven't been tested.
   "Bucket → Rain barrel" banner.
 - **Drag it around and the water sloshes.** It leans against the motion, surges
   when you stop, and settles. Glassware rocks quickly; the bathtub and pool sway
-  slowly.
+  slowly. Drag hard enough when it's nearly full and a few drops go over the rim
+  and splash below.
+- **Rubber duck.** The bathtub, hot tub and pool have one. It bobs, drifts, and
+  slides downhill when the water tilts.
+- **Freezes when idle.** After two hours with no responses the water starts to
+  ice over, and after three it's solid. The next response cracks the ice, a few
+  shards pop off, and it melts.
+- **Boils when busy.** At more than about five responses a minute (several
+  subagents at once, say), bubbles rise and steam curls off the surface. It
+  calms down when things slow.
+- **Jar shelf** (menu): a row of jars under the widget, one per day for the last
+  7 or 30 days, filled to that day's amount. Hover over a jar for its date and
+  total. Today's jar is outlined.
 - **CO₂ mode.** Choose *Fill with → CO₂* and the vessel fills with grey smoke:
   the estimated CO₂ as gas, about 547 L per kg (CO₂ is heavier than air, so it
   settles). Drops become puffs, and the legend compares the amount to driving a
@@ -115,6 +127,7 @@ itself is for hovering). It remembers its position.
 | Include Codex | Count Codex sessions as well as Claude Code. |
 | Context hint | Over 200K, 400K (default) or 600K tokens, or off. |
 | Drip sounds | Off by default. |
+| Jar shelf | Off, last 7 days, or last 30 days. |
 | Vessel | Automatic (grows with the amount), or always one vessel: test tube, glass, cylinder, bucket, rain barrel, bathtub, hot tub or pool. |
 | Size | Tiny, Small, Medium, Large, Extra large or Huge (60%–200%). |
 | Always on top | Keeps the widget above other windows. |
@@ -251,6 +264,7 @@ Background reading:
 | `--size=large` | Starts at a size: `tiny`, `small`, `medium`, `large`, `xl` or `huge`. |
 | `--show=co2` | Starts filled with `water` or `co2`. |
 | `--sounds` | Turns drip sounds on. |
+| `--shelf=7` | Shows the jar shelf: `0`, `7` or `30` days. |
 | `--statusline` | Prints the status line (see above) instead of starting the widget. |
 
 ## Uninstall

@@ -18,6 +18,7 @@ const PERIOD_ARG = (arg('period') || '').split('=')[1] || null;
 const SIZE_ARG = (arg('size') || '').split('=')[1] || null;
 const VESSEL_ARG = (arg('vessel') || '').split('=')[1] || null;
 const SHOW_ARG = (arg('show') || '').split('=')[1] || null; // water | co2
+const SHELF_ARG = (arg('shelf') || '').split('=')[1] || null; // 0 | 7 | 30
 
 // Local-only app: keep Chromium's background networking off.
 app.commandLine.appendSwitch('disable-background-networking');
@@ -66,7 +67,15 @@ const DEFAULTS = {
   show: 'water', // or 'co2': fill with the estimated CO₂ instead
   sounds: false, // synthesised drip sounds
   ctxHint: 400000, // show a hint when the active session's context passes this (0 = off)
+  shelf: 0, // jar shelf under the widget: 0 (off), 7 or 30 days
 };
+const SHELVES = [
+  [0, 'Off'],
+  [7, 'Last 7 days'],
+  [30, 'Last 30 days'],
+];
+const SHELF_H = { 0: 0, 7: 40, 30: 50 }; // extra window height for the shelf
+const BUSY_MS = 2 * 60 * 1000; // "how busy" = responses per minute over this window
 const CTX_HINTS = [0, 200000, 400000, 600000];
 const ACTIVE_MS = 10 * 60 * 1000; // a session counts as active this long after its last response
 const HINT_MS = 30 * 60 * 1000; // the context hint stays this long after the last response
@@ -217,17 +226,49 @@ function view(period = settings.period) {
     });
   }
 
-  // Flow rate: the last 10 minutes, scaled to an hour.
-  const cutoff = Date.now() - RATE_WINDOW_MS;
+  // Flow rate: the last 10 minutes, scaled to an hour. Busy: responses per
+  // minute over the last 2 minutes (the water boils when it's high).
+  const now = Date.now();
+  const cutoff = now - RATE_WINDOW_MS;
   const fresh = {};
+  let busyN = 0;
   for (const r of recent) {
     if (r.t < cutoff || (!settings.includeCodex && r.src === 'codex')) continue;
     if (period === 'session' && (!sess || r.sid !== sess.id)) continue;
+    if (r.t >= now - BUSY_MS) busyN++;
     addTok(fresh[r.fam] || (fresh[r.fam] = zero()), { ...r.tok, req: 1 });
   }
   const per = estimate(fresh, settings.method, settings.mode);
   const k = 3600000 / RATE_WINDOW_MS;
-  return { est, layers, rate: per.l.mid * k, rateKg: per.co2.mid * k, sess };
+
+  // When the last response arrived (the water freezes after a few idle hours).
+  let lastAt = 0;
+  if (period === 'session') lastAt = sess ? sess.last : 0;
+  else {
+    for (const id in sessions) {
+      const x = sessions[id];
+      if ((settings.includeCodex || x.src !== 'codex') && x.last > lastAt) lastAt = x.last;
+    }
+  }
+  return { est, layers, rate: per.l.mid * k, rateKg: per.co2.mid * k, sess, lastAt, busy: busyN / (BUSY_MS / 60000) };
+}
+
+// One jar per day for the shelf, oldest first.
+function shelfDays(n) {
+  const out = [];
+  const now = new Date();
+  for (let i = n - 1; i >= 0; i--) {
+    const d = addDays(now, -i);
+    const key = dayKey(d);
+    const fams = {};
+    for (const sp in days[key] || {}) {
+      if (!settings.includeCodex && sp.startsWith('codex|')) continue;
+      for (const f in days[key][sp]) addTok(fams[f] || (fams[f] = zero()), days[key][sp][f]);
+    }
+    const e = estimate(fams, settings.method, settings.mode);
+    out.push({ label: d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }), dow: d.getDay(), l: e.l.mid, kg: e.co2.mid });
+  }
+  return out;
 }
 
 // The active session's context: every response re-reads all of it, so a long
@@ -322,7 +363,7 @@ function writeStatus() {
 }
 
 function push(events = []) {
-  const { est, layers, rate, rateKg, sess } = view();
+  const { est, layers, rate, rateKg, sess, lastAt, busy } = view();
   const { label, text, since } = periodLabels(sess);
   const amount = settings.show === 'co2' ? fmtCo2(est.co2.mid) : fmtLiters(est.l.mid);
   if (tray) tray.setToolTip(`ThirstyClaude: ${amount} (${text})`);
@@ -336,6 +377,9 @@ function push(events = []) {
       hint: contextHint(),
       rateKg,
       since: since || null,
+      lastAt,
+      busy,
+      shelf: settings.shelf ? shelfDays(settings.shelf) : null,
       kwh: { lo: est.wh.lo / 1000, mid: est.wh.mid / 1000, hi: est.wh.hi / 1000 },
       tokens: est.tokens,
       layers,
@@ -421,10 +465,14 @@ function zoom() {
   return SIZES[settings.size] || 1;
 }
 
+function winSize() {
+  const z = zoom();
+  return { w: Math.round(BASE.w * z), h: Math.round((BASE.h + (SHELF_H[settings.shelf] || 0)) * z) };
+}
+
 function createWindow() {
   const z = zoom();
-  const w = Math.round(BASE.w * z);
-  const h = Math.round(BASE.h * z);
+  const { w, h } = winSize();
   const pos = position(w, h);
   win = new BrowserWindow({
     x: pos.x,
@@ -486,21 +534,31 @@ function createWindow() {
   });
 }
 
-function setSize(size) {
-  settings.size = size;
-  const z = zoom();
-  const w = Math.round(BASE.w * z);
-  const h = Math.round(BASE.h * z);
-  // Keep the whole widget on screen when it grows.
-  const [x, y] = win.getPosition();
-  const wa = screen.getDisplayMatching({ x, y, width: w, height: h }).workArea;
-  const nx = Math.max(wa.x, Math.min(x, wa.x + wa.width - w));
-  const ny = Math.max(wa.y, Math.min(y, wa.y + wa.height - h));
+// Applies the size (and shelf) to the window, keeping the whole widget on screen.
+// keepBottom: grow upwards, so a widget parked at the bottom of the screen stays put.
+function resize(keepBottom) {
+  const b = win.getBounds();
+  const { w, h } = winSize();
+  const wa = screen.getDisplayMatching(b).workArea;
+  const nx = Math.max(wa.x, Math.min(b.x, wa.x + wa.width - w));
+  const y0 = keepBottom ? b.y + b.height - h : b.y;
+  const ny = Math.max(wa.y, Math.min(y0, wa.y + wa.height - h));
   win.setBounds({ x: nx, y: ny, width: w, height: h });
-  win.webContents.setZoomFactor(z);
+  win.webContents.setZoomFactor(zoom());
   settings.x = nx;
   settings.y = ny;
   saveSettings();
+}
+
+function setSize(size) {
+  settings.size = size;
+  resize(false);
+}
+
+function setShelf(n) {
+  settings.shelf = n;
+  resize(true);
+  push();
 }
 
 function toggleVisible() {
@@ -572,6 +630,10 @@ function buildMenu() {
       })),
     },
     { label: 'Drip sounds', type: 'checkbox', checked: settings.sounds, click: (item) => set({ sounds: item.checked }) },
+    {
+      label: 'Jar shelf',
+      submenu: SHELVES.map(([n, label]) => ({ label, type: 'radio', checked: settings.shelf === n, click: () => setShelf(n) })),
+    },
     {
       label: 'Vessel',
       submenu: VESSELS.map(([id, label], i) => [
@@ -741,6 +803,8 @@ if (!SNAPSHOT && !DEMO && !app.requestSingleInstanceLock()) {
     if (arg('sounds')) settings.sounds = true;
     if (settings.show !== 'co2') settings.show = 'water';
     if (!CTX_HINTS.includes(settings.ctxHint)) settings.ctxHint = DEFAULTS.ctxHint;
+    if (SHELF_ARG != null) settings.shelf = Number(SHELF_ARG);
+    if (!(settings.shelf in SHELF_H)) settings.shelf = 0;
     if (SIZE_ARG && SIZES[SIZE_ARG]) settings.size = SIZE_ARG;
     if (VESSEL_ARG && VESSELS.some(([id]) => id === VESSEL_ARG)) settings.vessel = VESSEL_ARG;
     if (!SIZES[settings.size]) settings.size = 'medium';
