@@ -23,6 +23,10 @@ npm install -g github:BDigness/ThirstyClaude
 thirstyclaude
 ```
 
+On Windows PowerShell, if `npm` stops with "running scripts is disabled on this
+system", use `npm.cmd` and `thirstyclaude.cmd` instead, or run the same commands
+from Command Prompt.
+
 Or from a clone:
 
 ```bash
