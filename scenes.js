@@ -1,6 +1,6 @@
 // ── CO₂ scenes ───────────────────────────────────────────────────────────────
 // In CO₂ mode the widget draws the comparison itself instead of a vessel: a
-// phone charging, a cigarette burning down, a car idling, a car driving, a tire
+// phone charging, a cigarette burning down, a truck idling, a truck driving, a tire
 // fire, or a small forest. The main object shows progress towards the next
 // whole one, and finished ones pile up: charged batteries, butts in the
 // ashtray (and empty packs), hours on the clock, tires on the fire, trees.
@@ -10,8 +10,8 @@
 // only when called, after both files have loaded.
 
 const SCENE_LADDER = ['phone', 'cigarette', 'idle', 'tire', 'tree']; // automatic order
-const SCENE_NAMES = { phone: 'Phone charges', cigarette: 'Cigarettes', idle: 'Car idling', km: 'Driving', tire: 'Tire fire', tree: 'Trees' };
-const EQUIV_DEFAULT = { phoneKg: 0.0075, cigaretteKg: 0.014, idleKgPerHour: 1.42, carKgPerKm: 0.244, tireKg: 30.09, treeKgPerYear: 60 };
+const SCENE_NAMES = { phone: 'Phone charges', cigarette: 'Cigarettes', idle: 'Truck idling', km: 'Driving', tire: 'Tire fire', tree: 'Trees' };
+const EQUIV_DEFAULT = { phoneKg: 0.0075, cigaretteKg: 0.014, idleKgPerHour: 4.07, carKgPerKm: 0.394, tireKg: 30.09, treeKgPerYear: 60 };
 const SMOKE = '#c3c8cf';
 const SOOT = '#5f656e';
 const GROUND_Y = 222;
@@ -102,7 +102,7 @@ function badge(g, text, x, y, anchor = 'start') {
 
 // ── Shared pieces ───────────────────────────────────────────────────────────
 // The rubber duck comes along (the bath duck, facing right), always somewhere
-// it shouldn't be: on a smokestack, a cigarette, a car roof, up a tree…
+// it shouldn't be: on a smokestack, a cigarette, a truck hood, up a tree…
 const DUCK_BODY = `
     <path d="M-5.6 -1.8 L-8.4 -4.6 L-6.6 -0.4 Z" fill="#f6c445"/>
     <ellipse cx="0" cy="-1.3" rx="6.2" ry="3.5" fill="#f6c445"/>
@@ -129,32 +129,36 @@ function duck(x, y, k, { flip = false, tilt = 0, anim = 'sc-teeter', flap = fals
   return `<g transform="translate(${x} ${y}) rotate(${tilt}) scale(${flip ? -k : k} ${k})"><g class="sc-hop"><g class="${anim}">${art}</g></g></g>`;
 }
 
-// A small car, facing right, drawn with its rear wheel's ground point at 0 0.
-// rider: whatever sits on it (in car coordinates), moving with the body.
-function car(cls, rider = '') {
-  const wheel = (cx) => `<g transform="translate(${cx} -10)">
+// A pickup truck (crew cab, short bed), facing right, drawn with its rear
+// wheel's ground point near 0 0. rider: whatever sits on it (in truck
+// coordinates), moving with the body. The front window matches #truckWin.
+function truck(cls, rider = '') {
+  const wheel = (cx) => `<g transform="translate(${cx} -11) scale(1.16)">
       <circle r="9.5" fill="#1b1f27" stroke="#323843" stroke-width="1"/>
       <circle r="4.6" fill="#9aa1ab"/>
       <path class="sc-spokes" d="M0 -4.2 V4.2 M-3.6 -2.1 L3.6 2.1 M-3.6 2.1 L3.6 -2.1" stroke="#5d636d" stroke-width="1.1"/>
       <circle r="1.3" fill="#5d636d"/></g>`;
   return `<g class="${cls}">
     <g class="sc-body">
-      <path d="M6 -14 Q2 -14 2 -19 V-30 Q2 -36 8 -37 L18 -38 L30 -54 Q32 -57 36 -57 H62 Q66 -57 69 -54 L82 -38 L92 -36 Q96 -35 96 -29 V-19 Q96 -14 92 -14 Z" fill="#5f87b3"/>
-      <path d="M33 -53 H47 V-39 H22 Z" fill="#cfe2f7" fill-opacity="0.55"/>
-      <path d="M51 -53 H63 Q65 -53 67 -51 L78 -39 H51 Z" fill="#cfe2f7" fill-opacity="0.55"/>
-      <path d="M49 -38 V-16 M2 -21.5 H96" stroke="#3f6189" stroke-width="0.8" fill="none"/>
-      <path d="M53 -33 H58" stroke="#3f6189" stroke-width="1.3" stroke-linecap="round"/>
-      <ellipse cx="93.6" cy="-30" rx="2.4" ry="2" fill="#ffe39a"/>
-      <rect x="1.4" y="-33" width="2.6" height="5" rx="1" fill="#e05a4f"/>
-      <rect x="-4" y="-17" width="7" height="3" rx="1" fill="#9aa1ab"/>
-      <path d="M7 -14 A13 13 0 0 1 33 -14 Z M63 -14 A13 13 0 0 1 89 -14 Z" fill="#12161d"/>
+      <path d="M4 -16 Q1 -16 1 -19 V-41 H36 V-58 Q36 -62 40 -62 H59 Q62 -62 63.5 -59.5 L70 -44 L93 -41 Q97 -40.4 97 -36 V-19 Q97 -16 94 -16 Z" fill="#5f87b3"/>
+      <path d="M1.5 -41 H35.5" stroke="#3f6189" stroke-width="1.6" stroke-linecap="round"/>
+      <path d="M39 -58.5 H48.5 V-46 H39 Z" fill="#cfe2f7" fill-opacity="0.55"/>
+      <path d="M52 -58.5 H59 Q61 -58.5 62 -56.5 L66.8 -46 H52 Z" fill="#cfe2f7" fill-opacity="0.55"/>
+      <path d="M36 -41 V-17 M50.2 -60 V-17 M70 -44 V-17 M1 -25 H97" stroke="#3f6189" stroke-width="0.8" fill="none"/>
+      <path d="M40.5 -39 H44.5 M54.5 -39 H58.5" stroke="#3f6189" stroke-width="1.3" stroke-linecap="round"/>
+      <rect x="92.6" y="-39" width="4" height="5" rx="1" fill="#ffe39a"/>
+      <rect x="94.6" y="-32.5" width="3" height="10" rx="1" fill="#9aa1ab"/>
+      <rect x="1.2" y="-39" width="2.6" height="6" rx="1" fill="#e05a4f"/>
+      <rect x="-4" y="-18" width="8" height="4" rx="1" fill="#9aa1ab"/>
+      <rect x="92" y="-19" width="7.5" height="4" rx="1" fill="#9aa1ab"/>
+      <path d="M6 -16 A13 13 0 0 1 32 -16 Z M66 -16 A13 13 0 0 1 92 -16 Z" fill="#12161d"/>
       ${rider}
     </g>
-    ${wheel(20)}${wheel(76)}
+    ${wheel(19)}${wheel(79)}
   </g>`;
 }
-const CAR_AT = [40, GROUND_Y, 0.9]; // translate x, y and scale for both car scenes
-const EXHAUST = [CAR_AT[0] - 4 * CAR_AT[2], CAR_AT[1] - 15.5 * CAR_AT[2]];
+const TRUCK_AT = [40, GROUND_Y, 0.9]; // translate x, y and scale for both truck scenes
+const EXHAUST = [TRUCK_AT[0] - 4 * TRUCK_AT[2], TRUCK_AT[1] - 16 * TRUCK_AT[2]];
 
 // Flames: three tongues in each of three colours, flickering out of step.
 function flames(w, h) {
@@ -296,7 +300,7 @@ const SCENES = {
     },
   },
 
-  // A car idling, puffing exhaust; the clock fills with each hour, full hours above it.
+  // A pickup truck idling, puffing exhaust; the clock fills with each hour, full hours above it.
   idle: {
     zzz: [118, 150],
     svg: `
@@ -312,7 +316,7 @@ const SCENES = {
         <line class="sc-hand" x1="0" y1="0" x2="0" y2="-19" stroke="#eaf1fb" stroke-width="1.6" stroke-linecap="round"/>
         <circle r="2" fill="#eaf1fb"/>
       </g>
-      <g transform="translate(${CAR_AT[0]} ${CAR_AT[1]}) scale(${CAR_AT[2]})">${car('sc-idle', `<g clip-path="url(#carWin)">${duck(51.5, -32, 1.7, { anim: '' })}<path d="M71 -50 L64 -40" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity="0.25"/></g>`)}</g>
+      <g transform="translate(${TRUCK_AT[0]} ${TRUCK_AT[1]}) scale(${TRUCK_AT[2]})">${truck('sc-idle', `<g clip-path="url(#truckWin)">${duck(49.5, -36.5, 1.7, { anim: '' })}<path d="M63.4 -55 L58.6 -47" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity="0.25"/></g>`)}</g>
       <g transform="translate(${EXHAUST[0]} ${EXHAUST[1]})"><g class="sc-live"><g class="sc-lean">${loops(10, 2.8, '<circle r="4" fill="url(#scPuff)"/>', (i) => `--dx:${-18 - (i % 3) * 5}px;--dy:${-26 - (i % 2) * 8}px;--grow:2.8;--op:.85`)}</g></g></g>`,
     init(a, r) {
       r.tally = a.querySelector('.sc-tally');
@@ -339,7 +343,7 @@ const SCENES = {
     },
   },
 
-  // A car driving down the road; the odometer counts the km.
+  // A pickup truck driving down the road; the odometer counts the km.
   km: {
     zzz: [118, 150],
     svg: `
@@ -355,7 +359,7 @@ const SCENES = {
       <rect x="-2" y="222" width="142" height="9" fill="#262b33"/>
       <path class="sc-road" d="M-2 226.5 H140" stroke="#c9ced6" stroke-opacity="0.7" stroke-width="1.1" stroke-dasharray="8 8"/>
       <g class="sc-live sc-speed"><path d="M12 178 H26"/><path d="M6 190 H22" style="animation-delay:-.2s"/><path d="M14 200 H28" style="animation-delay:-.4s"/></g>
-      <g transform="translate(${CAR_AT[0]} ${CAR_AT[1]}) scale(${CAR_AT[2]})">${car('sc-drive', duck(87, -37.2, 1.5, { tilt: -8, anim: 'sc-wind' }))}</g>
+      <g transform="translate(${TRUCK_AT[0]} ${TRUCK_AT[1]}) scale(${TRUCK_AT[2]})">${truck('sc-drive', duck(86, -41.4, 1.5, { tilt: -8, anim: 'sc-wind' }))}</g>
       <g transform="translate(${EXHAUST[0]} ${EXHAUST[1]})"><g class="sc-live">${loops(8, 1.3, '<circle r="3.6" fill="url(#scPuff)"/>', (i) => `--dx:-38px;--dy:${-4 - (i % 3) * 3}px;--grow:2.4;--op:.8`)}</g></g>`,
     init(a, r) {
       r.rolls = [...a.querySelectorAll('.sc-roll')];

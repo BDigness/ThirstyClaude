@@ -74,7 +74,7 @@ const CO2_UNITS = [
   ['auto', 'Automatic'],
   ['phone', 'Phone charges'],
   ['cigarette', 'Cigarettes'],
-  ['idle', 'Car idling'],
+  ['idle', 'Truck idling'],
   ['km', 'Km driven'],
   ['tire', 'Tires burned'],
   ['tree', 'Trees for a year'],
