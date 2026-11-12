@@ -46,8 +46,9 @@ const GRID_CO2 = { lo: 0.25, mid: 0.394, hi: 0.45 };
 const CO2_EQUIV = {
   phoneKg: 0.019 * GRID_CO2.mid, // charging a smartphone: 0.019 kWh (EPA) on the average grid
   cigaretteKg: 0.014, // one cigarette over its whole life cycle (Zafeiridou et al., 2018)
-  idleKgPerHour: 0.16 * 8.887, // a compact car idling: 0.16 gal/h (Argonne) × 8.887 kg CO₂ per gallon (EPA)
-  carKgPerKm: 0.244, // an average gasoline car: 393 g per mile (EPA)
+  // The truck: a 2007 Ford F-150, 5.4 L Triton V8, 4WD, on gasoline (8.887 kg CO₂ per gallon, EPA).
+  idleKgPerHour: 0.39 * (5.4 / 4.6) * 8.887, // idling: Argonne's 4.6 L gas sedan burns 0.39 gal/h (DOE Fact #861), scaled to 5.4 L
+  carKgPerKm: 8.887 / 14 / 1.609344, // driving: 14 mpg combined (EPA, fueleconomy.gov)
   tireKg: (25 / 2000) * 28 * 85.97, // burning a 25 lb passenger tire: 28 mmBtu/short ton × 85.97 kg CO₂/mmBtu (EPA, 40 CFR 98)
   treeKgPerYear: 60, // taken up by one urban tree in a year (EPA)
 };

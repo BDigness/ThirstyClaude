@@ -3,7 +3,7 @@
 A small always-on-top desktop widget that fills with the estimated water behind
 your Claude Code (and Codex) token use. Each response drips in live. It can
 show the estimated CO₂ instead, as something you can picture: a cigarette
-burning down, a car idling, a tire fire.
+burning down, a truck idling, a tire fire.
 
 <p>
   <img src="docs/today.png" alt="Graduated cylinder at 6.6 L under a dripping burette, filled in coloured layers by project (demo data)" width="150">
@@ -112,17 +112,17 @@ Developed on Windows. macOS and Linux should work but haven't been tested.
   |---|---|---|
   | under 50 g | phone charges | A phone charging from a little power plant. The battery fills; full charges line up above. |
   | under 1 kg | cigarettes | A cigarette burns down in a glass ashtray. Butts pile up, and every 20 become an empty pack. |
-  | under 30 kg | car idling | A car idling, puffing exhaust. The clock fills each hour; full hours line up above. |
+  | under 30 kg | truck idling | A pickup truck idling, puffing exhaust. The clock fills each hour; full hours line up above. |
   | under 600 kg | tires burned | Tires stacked on a fire, under a column of black smoke. More tires, more stacks. |
   | more | trees for a year | A forest soaking up CO₂ in the sun, with a sapling growing towards the next tree. |
 
-  Km driven is available too: a car on the road and an odometer. The rubber
+  Km driven is available too: a truck on the road and an odometer. The rubber
   duck comes along, never anywhere sensible: perched on the power plant's
   smokestack, sitting on the end of the cigarette, behind the wheel of the
-  idling car, surfing the hood of the moving one, flapping in the updraft
+  idling truck, surfing the hood of the moving one, flapping in the updraft
   over the tire fire, and stuck on top of a tree. Each response sends up a
   puff, tinted by model, and the duck hops. When the widget is idle for a few hours the
-  fire goes out and the car switches off (z z z); the next response lights it
+  fire goes out and the truck switches off (z z z); the next response lights it
   again. Drag the widget and the flames and smoke trail behind.
 - **⚠ Context hint.** Every reply re-reads the whole conversation, so a long
   session costs more per reply. When the active session's context passes 400K
@@ -150,7 +150,7 @@ itself is for hovering). It remembers its position.
 | Empty / Drain | Named for what's showing: "Empty test tube", "Empty cylinder", "Drain bathtub" or "Drain pool" ("Clear the air" in CO₂ mode). Pours the water out, so you can measure one task ("since 3:42 PM"). Your real totals keep counting. `thirstyclaude --empty` does the same from a terminal. |
 | Period | This session, today, last 7 days, last 30 days, all time, or since emptied. *This session* follows the newest session that has replied in the last 10 minutes, so it starts from zero whenever you open a new one. If no session is active, it shows the last one that replied. |
 | Show | Water, or CO₂ (carbon emissions). |
-| Count CO₂ in | Automatic, phone charges, cigarettes, car idling, km driven, tires burned, or trees for a year. The picture, caption and rate follow it. |
+| Count CO₂ in | Automatic, phone charges, cigarettes, truck idling, km driven, tires burned, or trees for a year. The picture, caption and rate follow it. |
 | Estimate | ThirstyClaude or EcoLogits (see below). |
 | Water counted | Including power plants, or data-center cooling only. |
 | Include Codex | Count Codex sessions as well as Claude Code. |
@@ -274,8 +274,8 @@ average including line losses (EPA eGRID2022), as used by EPA's
   |---|---|---|
   | Phone charge | 7.5 g | 0.019 kWh per charge (EPA) on the average grid |
   | Cigarette | 14 g | Whole life cycle ([Zafeiridou et al., 2018](https://spiral.imperial.ac.uk/handle/10044/1/61157)) |
-  | Car idling | 1.4 kg per hour | A compact car burns 0.16 gal/h at idle ([Argonne](https://afdc.energy.gov/files/pdfs/argonne_idling_handout.pdf)); gasoline gives 8.887 kg CO₂ per gallon (EPA) |
-  | Km driven | 244 g | Average gasoline car, 393 g per mile (EPA) |
+  | Truck idling | 4.1 kg per hour | A 2007 Ford F-150 (5.4 L Triton V8): Argonne measured 0.39 gal/h at idle for a 4.6 L gas sedan ([DOE Fact #861](https://web.archive.org/web/20221217105244/https://www.energy.gov/eere/vehicles/fact-861-february-23-2015-idle-fuel-consumption-selected-gasoline-and-diesel-vehicles)), scaled to 5.4 L ≈ 0.46 gal/h; gasoline gives 8.887 kg CO₂ per gallon (EPA) |
+  | Km driven | 394 g | The same truck, 4WD, at 14 mpg combined ([fueleconomy.gov](https://www.fueleconomy.gov/feg/bymodel/2007_Ford_F150.shtml)); 2WD is 15 mpg, 368 g |
   | Tire burned | 30 kg | A 25 lb passenger tire; tire fuel is 28 mmBtu per short ton at 85.97 kg CO₂ per mmBtu ([EPA, 40 CFR 98](https://codes.findlaw.com/cfr/title-40-protection-of-environment/cfr-pt-40-98-subpt-c-tbl-c-1/)) |
   | Tree for a year | 60 kg | One urban tree (EPA) |
 

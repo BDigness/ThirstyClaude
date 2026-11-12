@@ -336,9 +336,9 @@ function co2Say(kg, unit, q) {
   const [each, one, many] = co2Units(q)[unit];
   if (unit === 'idle') {
     const min = (kg / each) * 60;
-    if (min < 90) return `${fmtCount(min)} min of car idling`;
-    if (min < 2880) return `${fmtCount(min / 60)} h of car idling`;
-    return `${fmtCount(min / 1440)} days of car idling`;
+    if (min < 90) return `${fmtCount(min)} min of truck idling`;
+    if (min < 2880) return `${fmtCount(min / 60)} h of truck idling`;
+    return `${fmtCount(min / 1440)} days of truck idling`;
   }
   const x = kg / each;
   if (x < 0.001) return `< 0.001 ${many}`;
